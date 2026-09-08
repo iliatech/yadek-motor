@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1787308360606,
+      "tag": "0000_material_mister_sinister",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787338870779,
+      "tag": "0001_wild_vision",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787510753915,
+      "tag": "0002_tricky_santa_claus",
+      "breakpoints": true
+    }
+  ]
+}
