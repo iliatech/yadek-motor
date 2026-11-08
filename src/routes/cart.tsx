@@ -30,7 +30,7 @@ function CartPage() {
   } = useCart();
 
   const formatPrice = (price: number) =>
-    `${toPersianDigits(price.toLocaleString("fa-IR"))} تومان`;
+    `${toPersianDigits(price.toLocaleString("fa-IR"))} ریال`;
 
   return (
     <div className="min-h-screen bg-background">

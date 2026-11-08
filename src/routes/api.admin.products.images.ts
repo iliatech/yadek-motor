@@ -1,27 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { and, asc, eq } from "drizzle-orm";
-import { unlink } from "node:fs/promises";
-import path from "node:path";
+import { env } from "cloudflare:workers";
 
 import { db } from "@/db";
 import { productImages, products } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
-
-/*
- * =========================================================
- * Types
- * =========================================================
- */
-
-/**
- * نوع transaction دیتابیس Drizzle
- *
- * این نوع از خود db استخراج می‌شود تا با
- * نسخه فعلی drizzle-orm پروژه کاملاً سازگار باشد.
- */
-type DbTransaction = Parameters<
-  Parameters<typeof db.transaction>[0]
->[0];
 
 /*
  * =========================================================
@@ -54,15 +37,13 @@ function normalizeDigits(value: string): string {
     const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
     const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
 
-    const persianIndex =
-      persianDigits.indexOf(digit);
+    const persianIndex = persianDigits.indexOf(digit);
 
     if (persianIndex !== -1) {
       return String(persianIndex);
     }
 
-    const arabicIndex =
-      arabicDigits.indexOf(digit);
+    const arabicIndex = arabicDigits.indexOf(digit);
 
     if (arabicIndex !== -1) {
       return String(arabicIndex);
@@ -75,9 +56,7 @@ function normalizeDigits(value: string): string {
 /**
  * تبدیل مقدار به عدد صحیح مثبت
  */
-function toPositiveInteger(
-  value: unknown,
-): number | null {
+function toPositiveInteger(value: unknown): number | null {
   if (
     typeof value === "number" &&
     Number.isInteger(value) &&
@@ -87,8 +66,7 @@ function toPositiveInteger(
   }
 
   if (typeof value === "string") {
-    const normalized =
-      normalizeDigits(value.trim());
+    const normalized = normalizeDigits(value.trim());
 
     if (!normalized) {
       return null;
@@ -96,10 +74,7 @@ function toPositiveInteger(
 
     const number = Number(normalized);
 
-    if (
-      Number.isInteger(number) &&
-      number > 0
-    ) {
+    if (Number.isInteger(number) && number > 0) {
       return number;
     }
   }
@@ -111,26 +86,16 @@ function toPositiveInteger(
  * دریافت تصاویر یک محصول
  * با ترتیب صحیح
  */
-async function getProductImages(
-  productId: number,
-) {
+async function getProductImages(productId: number) {
   return db
     .select({
       id: productImages.id,
-      productId:
-        productImages.productId,
-      image:
-        productImages.image,
-      sortOrder:
-        productImages.sortOrder,
+      productId: productImages.productId,
+      image: productImages.image,
+      sortOrder: productImages.sortOrder,
     })
     .from(productImages)
-    .where(
-      eq(
-        productImages.productId,
-        productId,
-      ),
-    )
+    .where(eq(productImages.productId, productId))
     .orderBy(
       asc(productImages.sortOrder),
       asc(productImages.id),
@@ -138,77 +103,30 @@ async function getProductImages(
 }
 
 /**
- * دریافت تصاویر محصول داخل transaction
+ * مرتب‌سازی تصاویر و هماهنگ کردن
+ * products.image با اولین تصویر
+ *
+ * بدون transaction
  */
-async function getProductImagesFromTransaction(
-  tx: DbTransaction,
+async function normalizeImageOrders(
   productId: number,
 ) {
-  return tx
-    .select({
-      id: productImages.id,
-      productId:
-        productImages.productId,
-      image:
-        productImages.image,
-      sortOrder:
-        productImages.sortOrder,
-    })
-    .from(productImages)
-    .where(
-      eq(
-        productImages.productId,
-        productId,
-      ),
-    )
-    .orderBy(
-      asc(productImages.sortOrder),
-      asc(productImages.id),
-    );
-}
+  const images = await getProductImages(productId);
 
-/**
- * مرتب‌سازی مجدد تصاویر داخل transaction
- *
- * ترتیب نهایی:
- *
- * 0
- * 1
- * 2
- * 3
- * ...
- */
-async function normalizeImageOrdersInTransaction(
-  tx: DbTransaction,
-  productId: number,
-) {
-  const images =
-    await getProductImagesFromTransaction(
-      tx,
-      productId,
-    );
+  const now = new Date().toISOString();
 
-  const now =
-    new Date().toISOString();
-
-  for (
-    let index = 0;
-    index < images.length;
-    index += 1
-  ) {
+  for (let index = 0; index < images.length; index += 1) {
     const image = images[index];
 
     if (!image) {
       continue;
     }
 
-    if (
-      image.sortOrder === index
-    ) {
+    if (image.sortOrder === index) {
       continue;
     }
 
-    await tx
+    await db
       .update(productImages)
       .set({
         sortOrder: index,
@@ -216,203 +134,48 @@ async function normalizeImageOrdersInTransaction(
       })
       .where(
         and(
-          eq(
-            productImages.id,
-            image.id,
-          ),
-          eq(
-            productImages.productId,
-            productId,
-          ),
+          eq(productImages.id, image.id),
+          eq(productImages.productId, productId),
         ),
       );
   }
 
-  return getProductImagesFromTransaction(
-    tx,
-    productId,
-  );
-}
+  const normalizedImages =
+    await getProductImages(productId);
 
-/**
- * هماهنگ کردن products.image
- * با اولین تصویر گالری
- */
-async function syncPrimaryImageInTransaction(
-  tx: DbTransaction,
-  productId: number,
-) {
-  const images =
-    await normalizeImageOrdersInTransaction(
-      tx,
-      productId,
-    );
+  const firstImage = normalizedImages[0];
 
-  const firstImage = images[0];
-
-  const now =
-    new Date().toISOString();
-
-  await tx
+  await db
     .update(products)
     .set({
-      image:
-        firstImage?.image ?? null,
+      image: firstImage?.image ?? null,
       updatedAt: now,
     })
-    .where(
-      eq(
-        products.id,
-        productId,
-      ),
-    );
+    .where(eq(products.id, productId));
 
-  return images;
+  return normalizedImages;
 }
 
 /**
- * استخراج نام فایل محلی
+ * حذف فایل تصویر از KV
  *
- * فقط مسیرهای:
+ * ساختار KV:
  *
- * /products/...
- *
- * قابل حذف هستند.
+ * products/{productId}/{imageId}.webp
  */
-function getLocalProductFileName(
-  image: string,
-): string | null {
-  const value = image.trim();
-
-  if (!value) {
-    return null;
-  }
-
-  /*
-   * تصاویر خارجی حذف نمی‌شوند.
-   */
-  if (
-    value.startsWith("http://") ||
-    value.startsWith("https://") ||
-    value.startsWith("//") ||
-    value.startsWith("data:")
-  ) {
-    return null;
-  }
-
-  let pathname = value;
-
-  try {
-    if (value.startsWith("/")) {
-      const parsed = new URL(
-        value,
-        "http://localhost",
-      );
-
-      pathname = parsed.pathname;
-    }
-  } catch {
-    return null;
-  }
-
-  /*
-   * فقط /products/... مجاز است.
-   */
-  if (
-    !pathname.startsWith(
-      "/products/",
-    )
-  ) {
-    return null;
-  }
-
-  const fileName =
-    pathname
-      .slice("/products/".length)
-      .split("/")
-      .pop() ?? "";
-
-  if (!fileName) {
-    return null;
-  }
-
-  /*
-   * جلوگیری از Path Traversal
-   */
-  if (
-    fileName === "." ||
-    fileName === ".." ||
-    fileName.includes("\\") ||
-    fileName.includes("/")
-  ) {
-    return null;
-  }
-
-  return fileName;
-}
-
-/**
- * حذف فایل فیزیکی تصویر
- */
-async function deleteLocalImageFile(
-  image: string,
+async function deleteImageFromKV(
+  productId: number,
+  imageId: number,
 ): Promise<void> {
-  const fileName =
-    getLocalProductFileName(image);
-
-  if (!fileName) {
-    return;
-  }
-
-  const productsDirectory =
-    path.resolve(
-      process.cwd(),
-      "public",
-      "products",
-    );
-
-  const filePath =
-    path.resolve(
-      productsDirectory,
-      fileName,
-    );
-
-  /*
-   * بررسی نهایی Path Traversal
-   */
-  const relativePath =
-    path.relative(
-      productsDirectory,
-      filePath,
-    );
-
-  if (
-    relativePath.startsWith("..") ||
-    path.isAbsolute(relativePath)
-  ) {
-    return;
-  }
+  const kvKey =
+    `products/${productId}/${imageId}.webp`;
 
   try {
-    await unlink(filePath);
+    await env.PRODUCT_IMAGES.delete(kvKey);
   } catch (error) {
-    const code =
-      (
-        error as {
-          code?: string;
-        }
-      )?.code;
-
-    /*
-     * نبودن فایل مهم نیست.
-     */
-    if (code === "ENOENT") {
-      return;
-    }
-
     console.warn(
-      "Could not delete product image file:",
-      filePath,
+      "Could not delete product image from KV:",
+      kvKey,
       error,
     );
   }
@@ -421,6 +184,9 @@ async function deleteLocalImageFile(
 /**
  * بررسی اینکه تصویر در محصول دیگری
  * استفاده نشده باشد.
+ *
+ * برای داده‌های قدیمی که ممکن است
+ * همان مسیر تصویر را داشته باشند.
  */
 async function isImageUsedElsewhere(
   image: string,
@@ -429,25 +195,17 @@ async function isImageUsedElsewhere(
   /*
    * بررسی product_images
    */
-  const imageReferences =
-    await db
-      .select({
-        productId:
-          productImages.productId,
-      })
-      .from(productImages)
-      .where(
-        eq(
-          productImages.image,
-          image,
-        ),
-      );
+  const imageReferences = await db
+    .select({
+      productId: productImages.productId,
+    })
+    .from(productImages)
+    .where(eq(productImages.image, image));
 
   if (
     imageReferences.some(
       (item) =>
-        item.productId !==
-        productId,
+        item.productId !== productId,
     )
   ) {
     return true;
@@ -458,22 +216,15 @@ async function isImageUsedElsewhere(
    *
    * برای سازگاری با داده‌های قدیمی.
    */
-  const productReferences =
-    await db
-      .select({
-        id: products.id,
-      })
-      .from(products)
-      .where(
-        eq(
-          products.image,
-          image,
-        ),
-      );
+  const productReferences = await db
+    .select({
+      id: products.id,
+    })
+    .from(products)
+    .where(eq(products.image, image));
 
   return productReferences.some(
-    (item) =>
-      item.id !== productId,
+    (item) => item.id !== productId,
   );
 }
 
@@ -494,9 +245,7 @@ export const Route = createFileRoute(
        * ===================================================
        */
 
-      DELETE: async ({
-        request,
-      }) => {
+      DELETE: async ({ request }) => {
         const admin =
           await requireAdmin(request);
 
@@ -527,10 +276,7 @@ export const Route = createFileRoute(
         }
 
         try {
-          let body: Record<
-            string,
-            unknown
-          >;
+          let body: Record<string, unknown>;
 
           try {
             body =
@@ -588,144 +334,148 @@ export const Route = createFileRoute(
           }
 
           /*
-           * تمام تغییرات دیتابیس
-           * داخل transaction
+           * -------------------------------------------------
+           * بررسی محصول
+           * -------------------------------------------------
            */
-          const result =
-            await db.transaction(
-              async (tx) => {
-                const productResult =
-                  await tx
-                    .select({
-                      id: products.id,
-                    })
-                    .from(products)
-                    .where(
-                      eq(
-                        products.id,
-                        productId,
-                      ),
-                    )
-                    .limit(1);
 
-                if (
-                  !productResult[0]
-                ) {
-                  throw new ImageRouteError(
-                    "PRODUCT_NOT_FOUND",
-                    "محصول پیدا نشد.",
-                    404,
-                  );
-                }
+          const productResult =
+            await db
+              .select({
+                id: products.id,
+              })
+              .from(products)
+              .where(
+                eq(
+                  products.id,
+                  productId,
+                ),
+              )
+              .limit(1);
 
-                const imageResult =
-                  await tx
-                    .select({
-                      id:
-                        productImages.id,
-                      productId:
-                        productImages.productId,
-                      image:
-                        productImages.image,
-                      sortOrder:
-                        productImages.sortOrder,
-                    })
-                    .from(
-                      productImages,
-                    )
-                    .where(
-                      and(
-                        eq(
-                          productImages.id,
-                          imageId,
-                        ),
-                        eq(
-                          productImages.productId,
-                          productId,
-                        ),
-                      ),
-                    )
-                    .limit(1);
+          if (!productResult[0]) {
+            throw new ImageRouteError(
+              "PRODUCT_NOT_FOUND",
+              "محصول پیدا نشد.",
+              404,
+            );
+          }
 
-                const image =
-                  imageResult[0];
+          /*
+           * -------------------------------------------------
+           * دریافت تصویر
+           * -------------------------------------------------
+           */
 
-                if (!image) {
-                  throw new ImageRouteError(
-                    "IMAGE_NOT_FOUND",
-                    "تصویر موردنظر پیدا نشد.",
-                    404,
-                  );
-                }
-
-                /*
-                 * حذف رکورد تصویر
-                 */
-                await tx
-                  .delete(productImages)
-                  .where(
-                    and(
-                      eq(
-                        productImages.id,
-                        imageId,
-                      ),
-                      eq(
-                        productImages.productId,
-                        productId,
-                      ),
-                    ),
-                  );
-
-                /*
-                 * مرتب‌سازی و هماهنگ‌سازی
-                 * تصویر اصلی
-                 */
-                const remainingImages =
-                  await syncPrimaryImageInTransaction(
-                    tx,
+          const imageResult =
+            await db
+              .select({
+                id: productImages.id,
+                productId:
+                  productImages.productId,
+                image:
+                  productImages.image,
+                sortOrder:
+                  productImages.sortOrder,
+              })
+              .from(productImages)
+              .where(
+                and(
+                  eq(
+                    productImages.id,
+                    imageId,
+                  ),
+                  eq(
+                    productImages.productId,
                     productId,
-                  );
+                  ),
+                ),
+              )
+              .limit(1);
 
-                return {
-                  deletedImage: {
-                    id: image.id,
-                    image: image.image,
-                  },
-                  deletedImagePath:
-                    image.image,
-                  images:
-                    remainingImages,
-                  primaryImage:
-                    remainingImages[0]
-                      ?.image ?? null,
-                };
-              },
+          const image =
+            imageResult[0];
+
+          if (!image) {
+            throw new ImageRouteError(
+              "IMAGE_NOT_FOUND",
+              "تصویر موردنظر پیدا نشد.",
+              404,
+            );
+          }
+
+          /*
+           * -------------------------------------------------
+           * حذف رکورد تصویر از D1
+           * -------------------------------------------------
+           */
+
+          await db
+            .delete(productImages)
+            .where(
+              and(
+                eq(
+                  productImages.id,
+                  imageId,
+                ),
+                eq(
+                  productImages.productId,
+                  productId,
+                ),
+              ),
             );
 
           /*
-           * فایل فیزیکی فقط بعد از
-           * موفقیت transaction حذف می‌شود.
+           * -------------------------------------------------
+           * مرتب‌سازی مجدد تصاویر
+           * و هماهنگ کردن products.image
+           * -------------------------------------------------
            */
-          const usedElsewhere =
-            await isImageUsedElsewhere(
-              result.deletedImagePath,
+
+          const remainingImages =
+            await normalizeImageOrders(
               productId,
             );
 
+          /*
+           * -------------------------------------------------
+           * بررسی استفاده از تصویر در داده‌های قدیمی
+           * -------------------------------------------------
+           */
+
+          const usedElsewhere =
+            await isImageUsedElsewhere(
+              image.image,
+              productId,
+            );
+
+          /*
+           * -------------------------------------------------
+           * حذف فایل از KV
+           *
+           * فقط اگر تصویر در جای دیگری
+           * استفاده نشده باشد.
+           * -------------------------------------------------
+           */
+
           if (!usedElsewhere) {
-            await deleteLocalImageFile(
-              result.deletedImagePath,
+            await deleteImageFromKV(
+              productId,
+              imageId,
             );
           }
 
           return Response.json({
             success: true,
-            deletedImage:
-              result.deletedImage,
+            deletedImage: {
+              id: image.id,
+              image: image.image,
+            },
             primaryImage:
-              result.primaryImage,
+              remainingImages[0]
+                ?.image ?? null,
             images:
-              result.images,
+              remainingImages,
             message:
               "تصویر با موفقیت حذف شد.",
           });
@@ -773,9 +523,7 @@ export const Route = createFileRoute(
        * ===================================================
        */
 
-      PATCH: async ({
-        request,
-      }) => {
+      PATCH: async ({ request }) => {
         const admin =
           await requireAdmin(request);
 
@@ -806,10 +554,7 @@ export const Route = createFileRoute(
         }
 
         try {
-          let body: Record<
-            string,
-            unknown
-          >;
+          let body: Record<string, unknown>;
 
           try {
             body =
@@ -899,176 +644,176 @@ export const Route = createFileRoute(
               );
             }
 
-            const result =
-              await db.transaction(
-                async (tx) => {
-                  const productResult =
-                    await tx
-                      .select({
-                        id:
-                          products.id,
-                      })
-                      .from(products)
-                      .where(
-                        eq(
-                          products.id,
-                          productId,
-                        ),
-                      )
-                      .limit(1);
+            /*
+             * بررسی محصول
+             */
 
-                  if (
-                    !productResult[0]
-                  ) {
-                    throw new ImageRouteError(
-                      "PRODUCT_NOT_FOUND",
-                      "محصول پیدا نشد.",
-                      404,
-                    );
-                  }
+            const productResult =
+              await db
+                .select({
+                  id: products.id,
+                })
+                .from(products)
+                .where(
+                  eq(
+                    products.id,
+                    productId,
+                  ),
+                )
+                .limit(1);
 
-                  /*
-                   * نکته مهم:
-                   * sortOrder را هم دریافت می‌کنیم.
-                   */
-                  const imageResult =
-                    await tx
-                      .select({
-                        id:
-                          productImages.id,
-                        productId:
-                          productImages.productId,
-                        image:
-                          productImages.image,
-                        sortOrder:
-                          productImages.sortOrder,
-                      })
-                      .from(
-                        productImages,
-                      )
-                      .where(
-                        and(
-                          eq(
-                            productImages.id,
-                            imageId,
-                          ),
-                          eq(
-                            productImages.productId,
-                            productId,
-                          ),
-                        ),
-                      )
-                      .limit(1);
+            if (!productResult[0]) {
+              throw new ImageRouteError(
+                "PRODUCT_NOT_FOUND",
+                "محصول پیدا نشد.",
+                404,
+              );
+            }
 
-                  const selectedImage =
-                    imageResult[0];
+            /*
+             * دریافت تصویر انتخاب‌شده
+             */
 
-                  if (
-                    !selectedImage
-                  ) {
-                    throw new ImageRouteError(
-                      "IMAGE_NOT_FOUND",
-                      "تصویر موردنظر پیدا نشد.",
-                      404,
-                    );
-                  }
-
-                  const currentImages =
-                    await getProductImagesFromTransaction(
-                      tx,
+            const imageResult =
+              await db
+                .select({
+                  id:
+                    productImages.id,
+                  productId:
+                    productImages.productId,
+                  image:
+                    productImages.image,
+                  sortOrder:
+                    productImages.sortOrder,
+                })
+                .from(
+                  productImages,
+                )
+                .where(
+                  and(
+                    eq(
+                      productImages.id,
+                      imageId,
+                    ),
+                    eq(
+                      productImages.productId,
                       productId,
-                    );
+                    ),
+                  ),
+                )
+                .limit(1);
 
-                  const reorderedImages =
-                    [
-                      selectedImage,
-                      ...currentImages.filter(
-                        (image) =>
-                          image.id !==
-                          selectedImage.id,
-                      ),
-                    ];
+            const selectedImage =
+              imageResult[0];
 
-                  const now =
-                    new Date().toISOString();
+            if (!selectedImage) {
+              throw new ImageRouteError(
+                "IMAGE_NOT_FOUND",
+                "تصویر موردنظر پیدا نشد.",
+                404,
+              );
+            }
 
-                  for (
-                    let index = 0;
-                    index <
-                    reorderedImages.length;
-                    index += 1
-                  ) {
-                    const image =
-                      reorderedImages[
-                        index
-                      ];
+            /*
+             * دریافت تصاویر فعلی
+             */
 
-                    if (!image) {
-                      continue;
-                    }
+            const currentImages =
+              await getProductImages(
+                productId,
+              );
 
-                    await tx
-                      .update(
-                        productImages,
-                      )
-                      .set({
-                        sortOrder:
-                          index,
-                        updatedAt:
-                          now,
-                      })
-                      .where(
-                        and(
-                          eq(
-                            productImages.id,
-                            image.id,
-                          ),
-                          eq(
-                            productImages.productId,
-                            productId,
-                          ),
-                        ),
-                      );
-                  }
+            /*
+             * انتقال تصویر انتخاب‌شده
+             * به ابتدای لیست
+             */
 
-                  /*
-                   * تصویر اصلی محصول
-                   */
-                  await tx
-                    .update(products)
-                    .set({
-                      image:
-                        selectedImage.image,
-                      updatedAt: now,
-                    })
-                    .where(
-                      eq(
-                        products.id,
-                        productId,
-                      ),
-                    );
+            const reorderedImages = [
+              selectedImage,
+              ...currentImages.filter(
+                (image) =>
+                  image.id !==
+                  selectedImage.id,
+              ),
+            ];
 
-                  const images =
-                    await getProductImagesFromTransaction(
-                      tx,
+            const now =
+              new Date().toISOString();
+
+            /*
+             * ذخیره ترتیب جدید
+             */
+
+            for (
+              let index = 0;
+              index <
+              reorderedImages.length;
+              index += 1
+            ) {
+              const image =
+                reorderedImages[index];
+
+              if (!image) {
+                continue;
+              }
+
+              await db
+                .update(
+                  productImages,
+                )
+                .set({
+                  sortOrder:
+                    index,
+                  updatedAt:
+                    now,
+                })
+                .where(
+                  and(
+                    eq(
+                      productImages.id,
+                      image.id,
+                    ),
+                    eq(
+                      productImages.productId,
                       productId,
-                    );
+                    ),
+                  ),
+                );
+            }
 
-                  return {
-                    primaryImage:
-                      selectedImage.image,
-                    images,
-                  };
-                },
+            /*
+             * تصویر اصلی محصول
+             */
+
+            await db
+              .update(products)
+              .set({
+                image:
+                  selectedImage.image,
+                updatedAt: now,
+              })
+              .where(
+                eq(
+                  products.id,
+                  productId,
+                ),
+              );
+
+            /*
+             * دریافت نتیجه نهایی
+             */
+
+            const images =
+              await getProductImages(
+                productId,
               );
 
             return Response.json({
               success: true,
               action,
               primaryImage:
-                result.primaryImage,
-              images:
-                result.images,
+                selectedImage.image,
+              images,
               message:
                 "تصویر اصلی با موفقیت تغییر کرد.",
             });
@@ -1103,6 +848,7 @@ export const Route = createFileRoute(
           /*
            * تبدیل IDها
            */
+
           const imageIds =
             rawImageIds.map(
               (imageId) =>
@@ -1113,8 +859,9 @@ export const Route = createFileRoute(
 
           /*
            * اگر حتی یکی از IDها
-           * نامعتبر باشد، کل درخواست رد می‌شود.
+           * نامعتبر باشد
            */
+
           if (
             imageIds.some(
               (imageId) =>
@@ -1141,228 +888,225 @@ export const Route = createFileRoute(
                 imageId !== null,
             );
 
-          const result =
-            await db.transaction(
-              async (tx) => {
-                const productResult =
-                  await tx
-                    .select({
-                      id:
-                        products.id,
-                    })
-                    .from(products)
-                    .where(
-                      eq(
-                        products.id,
-                        productId,
-                      ),
-                    )
-                    .limit(1);
+          /*
+           * بررسی محصول
+           */
 
-                if (
-                  !productResult[0]
-                ) {
-                  throw new ImageRouteError(
-                    "PRODUCT_NOT_FOUND",
-                    "محصول پیدا نشد.",
-                    404,
-                  );
-                }
+          const productResult =
+            await db
+              .select({
+                id: products.id,
+              })
+              .from(products)
+              .where(
+                eq(
+                  products.id,
+                  productId,
+                ),
+              )
+              .limit(1);
 
-                const currentImages =
-                  await getProductImagesFromTransaction(
-                    tx,
+          if (!productResult[0]) {
+            throw new ImageRouteError(
+              "PRODUCT_NOT_FOUND",
+              "محصول پیدا نشد.",
+              404,
+            );
+          }
+
+          /*
+           * دریافت تصاویر فعلی
+           */
+
+          const currentImages =
+            await getProductImages(
+              productId,
+            );
+
+          /*
+           * تعداد IDها باید دقیقاً
+           * برابر تعداد تصاویر باشد.
+           */
+
+          if (
+            validImageIds.length !==
+            currentImages.length
+          ) {
+            throw new ImageRouteError(
+              "INVALID_IMAGE_LIST",
+              "لیست تصاویر کامل نیست.",
+              400,
+            );
+          }
+
+          /*
+           * جلوگیری از ID تکراری
+           */
+
+          const uniqueImageIds =
+            new Set(
+              validImageIds,
+            );
+
+          if (
+            uniqueImageIds.size !==
+            validImageIds.length
+          ) {
+            throw new ImageRouteError(
+              "DUPLICATE_IMAGE_IDS",
+              "لیست تصاویر شامل شناسه تکراری است.",
+              400,
+            );
+          }
+
+          /*
+           * بررسی تعلق تمام تصاویر
+           * به همین محصول
+           */
+
+          const currentImageIds =
+            new Set(
+              currentImages.map(
+                (image) =>
+                  image.id,
+              ),
+            );
+
+          const allBelongToProduct =
+            validImageIds.every(
+              (imageId) =>
+                currentImageIds.has(
+                  imageId,
+                ),
+            );
+
+          if (
+            !allBelongToProduct
+          ) {
+            throw new ImageRouteError(
+              "IMAGE_NOT_BELONG_TO_PRODUCT",
+              "یکی از تصاویر متعلق به این محصول نیست.",
+              400,
+            );
+          }
+
+          const now =
+            new Date().toISOString();
+
+          /*
+           * ذخیره ترتیب جدید
+           */
+
+          for (
+            let index = 0;
+            index <
+            validImageIds.length;
+            index += 1
+          ) {
+            const imageId =
+              validImageIds[index];
+
+            if (
+              imageId ===
+              undefined
+            ) {
+              continue;
+            }
+
+            await db
+              .update(
+                productImages,
+              )
+              .set({
+                sortOrder:
+                  index,
+                updatedAt:
+                  now,
+              })
+              .where(
+                and(
+                  eq(
+                    productImages.id,
+                    imageId,
+                  ),
+                  eq(
+                    productImages.productId,
                     productId,
-                  );
+                  ),
+                ),
+              );
+          }
 
-                /*
-                 * تعداد IDها باید دقیقاً
-                 * برابر تعداد تصاویر باشد.
-                 */
-                if (
-                  validImageIds.length !==
-                  currentImages.length
-                ) {
-                  throw new ImageRouteError(
-                    "INVALID_IMAGE_LIST",
-                    "لیست تصاویر کامل نیست.",
-                    400,
-                  );
-                }
+          /*
+           * اولین تصویر = اصلی
+           */
 
-                /*
-                 * جلوگیری از ID تکراری
-                 */
-                const uniqueImageIds =
-                  new Set(
-                    validImageIds,
-                  );
+          const firstImageId =
+            validImageIds[0];
 
-                if (
-                  uniqueImageIds.size !==
-                  validImageIds.length
-                ) {
-                  throw new ImageRouteError(
-                    "DUPLICATE_IMAGE_IDS",
-                    "لیست تصاویر شامل شناسه تکراری است.",
-                    400,
-                  );
-                }
+          if (
+            firstImageId ===
+            undefined
+          ) {
+            throw new ImageRouteError(
+              "EMPTY_IMAGE_LIST",
+              "لیست تصاویر نمی‌تواند خالی باشد.",
+              400,
+            );
+          }
 
-                /*
-                 * بررسی تعلق تمام تصاویر
-                 * به همین محصول
-                 */
-                const currentImageIds =
-                  new Set(
-                    currentImages.map(
-                      (image) =>
-                        image.id,
-                    ),
-                  );
+          /*
+           * پیدا کردن تصویر اصلی جدید
+           */
 
-                const allBelongToProduct =
-                  validImageIds.every(
-                    (imageId) =>
-                      currentImageIds.has(
-                        imageId,
-                      ),
-                  );
+          const firstImage =
+            currentImages.find(
+              (image) =>
+                image.id ===
+                firstImageId,
+            );
 
-                if (
-                  !allBelongToProduct
-                ) {
-                  throw new ImageRouteError(
-                    "IMAGE_NOT_BELONG_TO_PRODUCT",
-                    "یکی از تصاویر متعلق به این محصول نیست.",
-                    400,
-                  );
-                }
+          if (!firstImage) {
+            throw new ImageRouteError(
+              "PRIMARY_IMAGE_NOT_FOUND",
+              "تصویر اصلی جدید پیدا نشد.",
+              500,
+            );
+          }
 
-                const now =
-                  new Date().toISOString();
+          /*
+           * هماهنگ کردن products.image
+           */
 
-                /*
-                 * ذخیره ترتیب جدید
-                 */
-                for (
-                  let index = 0;
-                  index <
-                  validImageIds.length;
-                  index += 1
-                ) {
-                  const imageId =
-                    validImageIds[
-                      index
-                    ];
+          await db
+            .update(products)
+            .set({
+              image:
+                firstImage.image,
+              updatedAt: now,
+            })
+            .where(
+              eq(
+                products.id,
+                productId,
+              ),
+            );
 
-                  if (
-                    imageId ===
-                    undefined
-                  ) {
-                    continue;
-                  }
+          /*
+           * دریافت نتیجه نهایی
+           */
 
-                  await tx
-                    .update(
-                      productImages,
-                    )
-                    .set({
-                      sortOrder:
-                        index,
-                      updatedAt:
-                        now,
-                    })
-                    .where(
-                      and(
-                        eq(
-                          productImages.id,
-                          imageId,
-                        ),
-                        eq(
-                          productImages.productId,
-                          productId,
-                        ),
-                      ),
-                    );
-                }
-
-                /*
-                 * اولین تصویر = اصلی
-                 */
-                const firstImageId =
-                  validImageIds[0];
-
-                if (
-                  firstImageId ===
-                  undefined
-                ) {
-                  throw new ImageRouteError(
-                    "EMPTY_IMAGE_LIST",
-                    "لیست تصاویر نمی‌تواند خالی باشد.",
-                    400,
-                  );
-                }
-
-                /*
-                 * پیدا کردن تصویر اصلی جدید
-                 */
-                const firstImage =
-                  currentImages.find(
-                    (image) =>
-                      image.id ===
-                      firstImageId,
-                  );
-
-                if (!firstImage) {
-                  throw new ImageRouteError(
-                    "PRIMARY_IMAGE_NOT_FOUND",
-                    "تصویر اصلی جدید پیدا نشد.",
-                    500,
-                  );
-                }
-
-                /*
-                 * هماهنگ کردن products.image
-                 */
-                await tx
-                  .update(products)
-                  .set({
-                    image:
-                      firstImage.image,
-                    updatedAt: now,
-                  })
-                  .where(
-                    eq(
-                      products.id,
-                      productId,
-                    ),
-                  );
-
-                /*
-                 * دریافت نتیجه نهایی
-                 */
-                const images =
-                  await getProductImagesFromTransaction(
-                    tx,
-                    productId,
-                  );
-
-                return {
-                  primaryImage:
-                    firstImage.image,
-                  images,
-                };
-              },
+          const images =
+            await getProductImages(
+              productId,
             );
 
           return Response.json({
             success: true,
             action,
             primaryImage:
-              result.primaryImage,
-            images:
-              result.images,
+              firstImage.image,
+            images,
             message:
               "ترتیب تصاویر با موفقیت ذخیره شد.",
           });

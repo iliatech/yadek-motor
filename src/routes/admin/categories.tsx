@@ -1,12 +1,20 @@
-import { createFileRoute } from "@tanstack/react-router";
 import {
-  Edit3,
+  createFileRoute,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "@tanstack/react-router";
+import {
   FolderTree,
   Plus,
-  RefreshCw,
   Search,
+  Pencil,
   Trash2,
+  Package,
   X,
+  Check,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -14,16 +22,10 @@ type Category = {
   id: number;
   name: string;
   slug: string;
-  description: string | null;
-  productCount: number;
-  createdAt: string;
-};
-
-type CategoriesResponse = {
-  success: boolean;
-  categories: Category[];
-  count: number;
-  message?: string;
+  description?: string | null;
+  productCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 type CategoryForm = {
@@ -32,16 +34,14 @@ type CategoryForm = {
   description: string;
 };
 
-type MutationResponse = {
-  success: boolean;
-  message?: string;
-  category?: Category;
-};
+type CategoriesResponse =
+  | Category[]
+  | {
+      categories?: Category[];
+    };
 
-const EMPTY_FORM: CategoryForm = {
-  name: "",
-  slug: "",
-  description: "",
+type ErrorResponse = {
+  error?: string;
 };
 
 export const Route = createFileRoute(
@@ -50,37 +50,24 @@ export const Route = createFileRoute(
   component: AdminCategoriesPage,
 });
 
-function toPersianDigits(value: string | number) {
-  const digits = "۰۱۲۳۴۵۶۷۸۹";
-
-  return String(value).replace(
-    /\d/g,
-    (digit) => digits[Number(digit)] ?? digit,
-  );
-}
-
-function formatDate(date: string) {
-  try {
-    return new Intl.DateTimeFormat("fa-IR", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(date));
-  } catch {
-    return date;
-  }
-}
-
-function createSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^\u0600-\u06FFa-zA-Z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 function AdminCategoriesPage() {
+  const location = useLocation();
+
+  const isCategoryDetail =
+    location.pathname.startsWith(
+      "/admin/categories/",
+    );
+
+  if (isCategoryDetail) {
+    return <Outlet />;
+  }
+
+  return <CategoriesListPage />;
+}
+
+function CategoriesListPage() {
+  const navigate = useNavigate();
+
   const [categories, setCategories] =
     useState<Category[]>([]);
 
@@ -90,26 +77,30 @@ function AdminCategoriesPage() {
   const [error, setError] =
     useState("");
 
-  const [successMessage, setSuccessMessage] =
-    useState("");
-
   const [search, setSearch] =
     useState("");
 
-  const [modalOpen, setModalOpen] =
+  const [showModal, setShowModal] =
     useState(false);
 
   const [editingCategory, setEditingCategory] =
     useState<Category | null>(null);
 
   const [form, setForm] =
-    useState<CategoryForm>(EMPTY_FORM);
+    useState<CategoryForm>({
+      name: "",
+      slug: "",
+      description: "",
+    });
 
   const [saving, setSaving] =
     useState(false);
 
   const [deletingId, setDeletingId] =
     useState<number | null>(null);
+
+  const [successMessage, setSuccessMessage] =
+    useState("");
 
   async function loadCategories() {
     try {
@@ -120,27 +111,32 @@ function AdminCategoriesPage() {
         "/api/admin/categories",
       );
 
-      const data =
-        (await response.json()) as CategoriesResponse;
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
+      if (!response.ok) {
         throw new Error(
-          data.message ??
-            "دریافت دسته‌بندی‌ها ناموفق بود.",
+          "خطا در دریافت دسته‌بندی‌ها",
         );
       }
 
-      setCategories(data.categories);
-    } catch (error) {
-      console.error(error);
+      const data =
+        (await response.json()) as CategoriesResponse;
+
+      const loadedCategories =
+        Array.isArray(data)
+          ? data
+          : Array.isArray(
+                data["categories"],
+              )
+            ? data["categories"]
+            : [];
+
+      setCategories(
+        loadedCategories,
+      );
+    } catch (err) {
+      console.error(err);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "خطا در دریافت دسته‌بندی‌ها.",
+        "دریافت دسته‌بندی‌ها با خطا مواجه شد.",
       );
     } finally {
       setLoading(false);
@@ -148,39 +144,50 @@ function AdminCategoriesPage() {
   }
 
   useEffect(() => {
-    loadCategories();
+    void loadCategories();
   }, []);
 
-  const filteredCategories = useMemo(() => {
-    const query = search
-      .trim()
-      .toLowerCase();
+  const filteredCategories =
+    useMemo(() => {
+      const query =
+        search.trim().toLowerCase();
 
-    if (!query) {
-      return categories;
-    }
+      if (!query) {
+        return categories;
+      }
 
-    return categories.filter(
-      (category) =>
-        category.name
-          .toLowerCase()
-          .includes(query) ||
-        category.slug
-          .toLowerCase()
-          .includes(query) ||
-        (
-          category.description ?? ""
-        )
-          .toLowerCase()
-          .includes(query),
-    );
-  }, [categories, search]);
+      return categories.filter(
+        (category) => {
+          return (
+            category.name
+              .toLowerCase()
+              .includes(query) ||
+            category.slug
+              .toLowerCase()
+              .includes(query) ||
+            (
+              category.description ??
+              ""
+            )
+              .toLowerCase()
+              .includes(query)
+          );
+        },
+      );
+    }, [categories, search]);
 
   function openCreateModal() {
     setEditingCategory(null);
-    setForm(EMPTY_FORM);
+
+    setForm({
+      name: "",
+      slug: "",
+      description: "",
+    });
+
     setError("");
-    setModalOpen(true);
+    setSuccessMessage("");
+    setShowModal(true);
   }
 
   function openEditModal(
@@ -196,7 +203,8 @@ function AdminCategoriesPage() {
     });
 
     setError("");
-    setModalOpen(true);
+    setSuccessMessage("");
+    setShowModal(true);
   }
 
   function closeModal() {
@@ -204,123 +212,140 @@ function AdminCategoriesPage() {
       return;
     }
 
-    setModalOpen(false);
+    setShowModal(false);
     setEditingCategory(null);
-    setForm(EMPTY_FORM);
-  }
 
-  function updateField(
-    field: keyof CategoryForm,
-    value: string,
-  ) {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }
-
-  function handleNameChange(
-    value: string,
-  ) {
-    setForm((current) => ({
-      ...current,
-      name: value,
-      slug:
-        editingCategory
-          ? current.slug
-          : createSlug(value),
-    }));
+    setForm({
+      name: "",
+      slug: "",
+      description: "",
+    });
   }
 
   async function saveCategory() {
+    const name =
+      form.name.trim();
+
+    const slug =
+      form.slug.trim();
+
+    const description =
+      form.description.trim();
+
+    if (!name) {
+      setError(
+        "نام دسته‌بندی را وارد کنید.",
+      );
+
+      return;
+    }
+
+    if (!slug) {
+      setError(
+        "اسلاگ دسته‌بندی را وارد کنید.",
+      );
+
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
       setSuccessMessage("");
 
-      const name = form.name.trim();
+      if (editingCategory) {
+        const response =
+          await fetch(
+            `/api/admin/categories?categoryId=${editingCategory.id}`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                name,
+                slug,
+                description,
+              }),
+            },
+          );
 
-      const slug =
-        form.slug.trim() ||
-        createSlug(name);
+        if (!response.ok) {
+          const data =
+            (await response
+              .json()
+              .catch(
+                () => null,
+              )) as
+              | ErrorResponse
+              | null;
 
-      const description =
-        form.description.trim() ||
-        null;
+          throw new Error(
+            data?.["error"] ||
+              "ویرایش دسته‌بندی انجام نشد.",
+          );
+        }
 
-      if (!name) {
-        throw new Error(
-          "نام دسته‌بندی الزامی است.",
+        setSuccessMessage(
+          "دسته‌بندی با موفقیت ویرایش شد.",
+        );
+      } else {
+        const response =
+          await fetch(
+            "/api/admin/categories",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                name,
+                slug,
+                description,
+              }),
+            },
+          );
+
+        if (!response.ok) {
+          const data =
+            (await response
+              .json()
+              .catch(
+                () => null,
+              )) as
+              | ErrorResponse
+              | null;
+
+          throw new Error(
+            data?.["error"] ||
+              "ایجاد دسته‌بندی انجام نشد.",
+          );
+        }
+
+        setSuccessMessage(
+          "دسته‌بندی با موفقیت ایجاد شد.",
         );
       }
 
-      if (!slug) {
-        throw new Error(
-          "Slug دسته‌بندی معتبر نیست.",
-        );
-      }
+      setShowModal(false);
+      setEditingCategory(null);
 
-      const payload = editingCategory
-        ? {
-            categoryId:
-              editingCategory.id,
-            name,
-            slug,
-            description,
-          }
-        : {
-            name,
-            slug,
-            description,
-          };
-
-      const response = await fetch(
-        "/api/admin/categories",
-        {
-          method: editingCategory
-            ? "PATCH"
-            : "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify(payload),
-        },
-      );
-
-      const data =
-        (await response.json()) as MutationResponse;
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        throw new Error(
-          data.message ??
-            "ذخیره دسته‌بندی ناموفق بود.",
-        );
-      }
+      setForm({
+        name: "",
+        slug: "",
+        description: "",
+      });
 
       await loadCategories();
-
-      setSuccessMessage(
-        editingCategory
-          ? "دسته‌بندی با موفقیت ویرایش شد."
-          : "دسته‌بندی با موفقیت ایجاد شد.",
-      );
-
-      closeModal();
-
-      window.setTimeout(() => {
-        setSuccessMessage("");
-      }, 3000);
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "ذخیره دسته‌بندی ناموفق بود.",
+        err instanceof Error
+          ? err.message
+          : "عملیات انجام نشد.",
       );
     } finally {
       setSaving(false);
@@ -330,9 +355,12 @@ function AdminCategoriesPage() {
   async function deleteCategory(
     category: Category,
   ) {
-    if (category.productCount > 0) {
+    if (
+      category.productCount &&
+      category.productCount > 0
+    ) {
       setError(
-        "این دسته‌بندی دارای محصول است و نمی‌توان آن را حذف کرد.",
+        `دسته‌بندی «${category.name}» دارای ${category.productCount} محصول است و فعلاً قابل حذف نیست.`,
       );
 
       return;
@@ -340,7 +368,7 @@ function AdminCategoriesPage() {
 
     const confirmed =
       window.confirm(
-        `آیا از حذف «${category.name}» مطمئن هستید؟`,
+        `آیا از حذف دسته‌بندی «${category.name}» مطمئن هستید؟`,
       );
 
     if (!confirmed) {
@@ -352,311 +380,307 @@ function AdminCategoriesPage() {
       setError("");
       setSuccessMessage("");
 
-      const response = await fetch(
-        "/api/admin/categories",
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type":
-              "application/json",
+      const response =
+        await fetch(
+          `/api/admin/categories?categoryId=${category.id}`,
+          {
+            method: "DELETE",
           },
-          body: JSON.stringify({
-            categoryId:
-              category.id,
-          }),
-        },
-      );
+        );
 
-      const data =
-        (await response.json()) as MutationResponse;
+      if (!response.ok) {
+        const data =
+          (await response
+            .json()
+            .catch(
+              () => null,
+            )) as
+            | ErrorResponse
+            | null;
 
-      if (
-        !response.ok ||
-        !data.success
-      ) {
         throw new Error(
-          data.message ??
-            "حذف دسته‌بندی ناموفق بود.",
+          data?.["error"] ||
+            "حذف دسته‌بندی انجام نشد.",
         );
       }
-
-      setCategories((current) =>
-        current.filter(
-          (item) =>
-            item.id !== category.id,
-        ),
-      );
 
       setSuccessMessage(
         "دسته‌بندی با موفقیت حذف شد.",
       );
 
-      window.setTimeout(() => {
-        setSuccessMessage("");
-      }, 3000);
-    } catch (error) {
-      console.error(error);
+      await loadCategories();
+    } catch (err) {
+      console.error(err);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "حذف دسته‌بندی ناموفق بود.",
+        err instanceof Error
+          ? err.message
+          : "حذف دسته‌بندی انجام نشد.",
       );
     } finally {
       setDeletingId(null);
     }
   }
 
+  function openCategoryProducts(
+    category: Category,
+  ) {
+    const targetPath =
+      `/admin/categories/${category.id}`;
+
+    console.log(
+      "[CATEGORY NAVIGATION]:",
+      targetPath,
+    );
+
+    void navigate({
+      to: "/admin/categories/$categoryId",
+      params: {
+        categoryId:
+          String(category.id),
+      },
+    });
+  }
+
   return (
-    <main
-      dir="rtl"
-      className="min-h-screen bg-neutral-950 px-4 py-8 text-white md:px-8"
-    >
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-5 border-b border-white/10 pb-6 md:flex-row md:items-center md:justify-between">
+    <div className="min-h-screen bg-[#050505] text-white">
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+
+        {/* Header */}
+        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-3">
-              <div className="rounded-xl bg-white/10 p-3">
-                <FolderTree className="h-6 w-6" />
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-[#0d0d0d]">
+                <FolderTree className="h-5 w-5 text-white" />
               </div>
 
-              <h1 className="text-2xl font-bold md:text-3xl">
-                مدیریت دسته‌بندی‌ها
-              </h1>
-            </div>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">
+                  مدیریت دسته‌بندی‌ها
+                </h1>
 
-            <p className="text-sm text-neutral-400">
-              ایجاد، ویرایش و مدیریت دسته‌بندی‌های فروشگاه
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-3">
-              <span className="text-xs text-neutral-500">
-                تعداد دسته‌بندی‌ها
-              </span>
-
-              <div className="mt-1 text-xl font-bold">
-                {toPersianDigits(
-                  categories.length,
-                )}
+                <p className="mt-1 text-sm text-white/45">
+                  ایجاد، ویرایش و مدیریت دسته‌بندی محصولات
+                </p>
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={loadCategories}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RefreshCw
-                className={
-                  loading
-                    ? "h-4 w-4 animate-spin"
-                    : "h-4 w-4"
-                }
-              />
-
-              بروزرسانی
-            </button>
-
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-neutral-950 transition hover:bg-neutral-200"
-            >
-              <Plus className="h-4 w-4" />
-
-              افزودن دسته‌بندی
-            </button>
           </div>
+
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90"
+          >
+            <Plus className="h-4 w-4" />
+            دسته‌بندی جدید
+          </button>
         </div>
 
+        {/* Messages */}
+        {error && (
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+
+            <span>{error}</span>
+
+            <button
+              type="button"
+              onClick={() =>
+                setError("")
+              }
+              className="mr-auto text-white/40 transition hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {successMessage && (
-          <div className="mb-6 rounded-xl border border-green-500/20 bg-green-500/10 px-5 py-4 text-sm text-green-300">
-            {successMessage}
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+            <Check className="mt-0.5 h-4 w-4 shrink-0" />
+
+            <span>
+              {successMessage}
+            </span>
+
+            <button
+              type="button"
+              onClick={() =>
+                setSuccessMessage("")
+              }
+              className="mr-auto text-white/40 transition hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
-        {error && !modalOpen && (
-          <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-            {error}
-          </div>
-        )}
-
-        <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-          <div className="flex items-center gap-3">
-            <Search className="h-5 w-5 text-neutral-500" />
+        {/* Search */}
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#0b0b0b] p-4">
+          <div className="relative">
+            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
 
             <input
+              type="text"
               value={search}
               onChange={(event) =>
                 setSearch(
                   event.target.value,
                 )
               }
-              placeholder="جستجوی نام، slug یا توضیحات..."
-              className="w-full bg-transparent text-sm text-white outline-none placeholder:text-neutral-600"
+              placeholder="جستجوی دسته‌بندی..."
+              className="w-full rounded-xl border border-white/10 bg-[#060606] py-3 pl-4 pr-10 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-white/30"
             />
           </div>
         </div>
 
-        {loading && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-12 text-center">
-            <RefreshCw className="mx-auto mb-4 h-8 w-8 animate-spin text-neutral-500" />
-
-            <p className="text-neutral-400">
+        {/* Categories */}
+        {loading ? (
+          <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-white/10 bg-[#0b0b0b]">
+            <div className="flex items-center gap-2 text-sm text-white/45">
+              <Loader2 className="h-4 w-4 animate-spin" />
               در حال دریافت دسته‌بندی‌ها...
+            </div>
+          </div>
+        ) : filteredCategories.length ===
+          0 ? (
+          <div className="flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-[#0b0b0b] px-4 text-center">
+            <FolderTree className="mb-4 h-10 w-10 text-white/25" />
+
+            <h2 className="text-base font-semibold">
+              دسته‌بندی‌ای پیدا نشد
+            </h2>
+
+            <p className="mt-2 text-sm text-white/40">
+              {search
+                ? "عبارت جستجو را تغییر دهید."
+                : "هنوز دسته‌بندی‌ای ایجاد نشده است."}
             </p>
           </div>
-        )}
-
-        {!loading &&
-          filteredCategories.length === 0 && (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-12 text-center">
-              <FolderTree className="mx-auto mb-4 h-12 w-12 text-neutral-600" />
-
-              <h2 className="text-lg font-bold">
-                دسته‌بندی‌ای پیدا نشد
-              </h2>
-
-              <p className="mt-2 text-sm text-neutral-500">
-                دسته‌بندی مطابق جستجوی شما وجود ندارد.
-              </p>
-            </div>
-          )}
-
-        {!loading &&
-          filteredCategories.length > 0 && (
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {filteredCategories.map(
-                (category) => (
-                  <article
-                    key={category.id}
-                    className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
-                  >
-                    <div className="mb-5 flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-xl bg-white/10 p-3">
-                          <FolderTree className="h-5 w-5" />
-                        </div>
-
-                        <div>
-                          <h2 className="font-bold">
-                            {category.name}
-                          </h2>
-
-                          <p className="mt-1 font-mono text-xs text-neutral-500">
-                            {category.slug}
-                          </p>
-                        </div>
-                      </div>
-
-                      <span className="rounded-lg bg-white/5 px-2 py-1 font-mono text-[10px] text-neutral-500">
-                        #
-                        {toPersianDigits(
-                          category.id,
-                        )}
-                      </span>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredCategories.map(
+              (category) => (
+                <div
+                  key={category.id}
+                  className="group rounded-2xl border border-white/10 bg-[#0b0b0b] p-5 transition hover:border-white/20"
+                >
+                  {/* Category title */}
+                  <div className="mb-4 flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[#050505]">
+                      <FolderTree className="h-4 w-4 text-white/70" />
                     </div>
 
-                    {category.description && (
-                      <p className="mb-5 line-clamp-3 text-sm leading-7 text-neutral-400">
-                        {
-                          category.description
-                        }
+                    <div className="min-w-0">
+                      <h2 className="truncate font-semibold text-white">
+                        {category.name}
+                      </h2>
+
+                      <p
+                        dir="ltr"
+                        className="mt-1 truncate text-left text-xs text-white/35"
+                      >
+                        {category.slug}
                       </p>
-                    )}
-
-                    <div className="mb-5 flex items-center justify-between border-t border-white/10 pt-4">
-                      <div>
-                        <span className="text-xs text-neutral-500">
-                          تعداد محصولات
-                        </span>
-
-                        <div className="mt-1 font-bold">
-                          {toPersianDigits(
-                            category.productCount,
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="text-left">
-                        <span className="text-xs text-neutral-500">
-                          ایجاد شده
-                        </span>
-
-                        <div className="mt-1 text-xs text-neutral-400">
-                          {formatDate(
-                            category.createdAt,
-                          )}
-                        </div>
-                      </div>
                     </div>
+                  </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openEditModal(
-                            category,
-                          )
-                        }
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium transition hover:bg-white/10"
-                      >
-                        <Edit3 className="h-4 w-4" />
+                  {/* Description */}
+                  {category.description && (
+                    <p className="mb-4 line-clamp-2 text-sm leading-6 text-white/45">
+                      {
+                        category.description
+                      }
+                    </p>
+                  )}
 
-                        ویرایش
-                      </button>
+                  {/* Product count */}
+                  <div className="mb-4 flex items-center gap-2 rounded-xl border border-white/10 bg-[#050505] px-3 py-2.5 text-sm">
+                    <Package className="h-4 w-4 text-white/40" />
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          deleteCategory(
-                            category,
-                          )
-                        }
-                        disabled={
-                          deletingId ===
-                            category.id ||
-                          category.productCount >
-                            0
-                        }
-                        title={
-                          category.productCount >
-                          0
-                            ? "این دسته دارای محصول است."
-                            : "حذف دسته‌بندی"
-                        }
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {deletingId ===
-                        category.id ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                  </article>
-                ),
-              )}
-            </div>
-          )}
+                    <span className="text-white/40">
+                      تعداد محصولات:
+                    </span>
+
+                    <span className="font-semibold text-white">
+                      {category.productCount ??
+                        0}
+                    </span>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openCategoryProducts(
+                          category,
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#050505] px-3 py-2.5 text-xs font-medium text-white/80 transition hover:border-white/25 hover:bg-white/[0.04]"
+                    >
+                      <Package className="h-4 w-4" />
+                      محصولات
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openEditModal(
+                          category,
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#050505] px-3 py-2.5 text-xs font-medium text-white/80 transition hover:border-white/25 hover:bg-white/[0.04]"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      ویرایش
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        deletingId ===
+                        category.id
+                      }
+                      onClick={() =>
+                        void deleteCategory(
+                          category,
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.03] px-3 py-2.5 text-xs font-medium text-red-300 transition hover:border-red-500/30 hover:bg-red-500/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {deletingId ===
+                      category.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+
+                      حذف
+                    </button>
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+        )}
       </div>
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
-          <div className="my-8 w-full max-w-2xl rounded-2xl border border-white/10 bg-neutral-950 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+      {/* Create / Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0b0b0b] shadow-2xl">
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
-                <h2 className="text-xl font-bold">
+                <h2 className="font-semibold text-white">
                   {editingCategory
                     ? "ویرایش دسته‌بندی"
-                    : "افزودن دسته‌بندی جدید"}
+                    : "ایجاد دسته‌بندی"}
                 </h2>
 
-                <p className="mt-1 text-xs text-neutral-500">
+                <p className="mt-1 text-xs text-white/40">
                   اطلاعات دسته‌بندی را وارد کنید.
                 </p>
               </div>
@@ -665,104 +689,120 @@ function AdminCategoriesPage() {
                 type="button"
                 onClick={closeModal}
                 disabled={saving}
-                className="rounded-lg p-2 text-neutral-500 transition hover:bg-white/5 hover:text-white"
+                className="rounded-lg p-2 text-white/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="p-6">
+            {/* Modal Body */}
+            <div className="space-y-4 p-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-white/80">
+                  نام دسته‌بندی
+                </label>
+
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm(
+                      (
+                        current,
+                      ) => ({
+                        ...current,
+                        name: event.target
+                          .value,
+                      }),
+                    )
+                  }
+                  placeholder="مثلاً سیستم ترمز"
+                  className="w-full rounded-xl border border-white/10 bg-[#050505] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-white/30"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-white/80">
+                  اسلاگ
+                </label>
+
+                <input
+                  type="text"
+                  value={form.slug}
+                  onChange={(event) =>
+                    setForm(
+                      (
+                        current,
+                      ) => ({
+                        ...current,
+                        slug: event.target
+                          .value,
+                      }),
+                    )
+                  }
+                  placeholder="مثلاً brake-system"
+                  dir="ltr"
+                  className="w-full rounded-xl border border-white/10 bg-[#050505] px-3 py-2.5 text-left text-sm text-white outline-none transition placeholder:text-white/25 focus:border-white/30"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-white/80">
+                  توضیحات
+                </label>
+
+                <textarea
+                  value={
+                    form.description
+                  }
+                  onChange={(event) =>
+                    setForm(
+                      (
+                        current,
+                      ) => ({
+                        ...current,
+                        description:
+                          event.target
+                            .value,
+                      }),
+                    )
+                  }
+                  placeholder="توضیح کوتاه درباره این دسته‌بندی..."
+                  rows={4}
+                  className="w-full resize-none rounded-xl border border-white/10 bg-[#050505] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-white/30"
+                />
+              </div>
+
               {error && (
-                <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                  {error}
+                <div className="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+
+                  <span>{error}</span>
                 </div>
               )}
-
-              <div className="space-y-5">
-                <div>
-                  <label className="mb-2 block text-sm text-neutral-400">
-                    نام دسته‌بندی
-                    <span className="mr-1 text-red-400">
-                      *
-                    </span>
-                  </label>
-
-                  <input
-                    value={form.name}
-                    onChange={(event) =>
-                      handleNameChange(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="مثلاً لوازم ترمز"
-                    className="w-full rounded-xl border border-white/10 bg-neutral-900 px-4 py-3 text-sm text-white outline-none placeholder:text-neutral-600 focus:border-white/30"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm text-neutral-400">
-                    Slug
-                  </label>
-
-                  <input
-                    value={form.slug}
-                    onChange={(event) =>
-                      updateField(
-                        "slug",
-                        event.target.value,
-                      )
-                    }
-                    placeholder="مثلاً brake-parts"
-                    dir="ltr"
-                    className="w-full rounded-xl border border-white/10 bg-neutral-900 px-4 py-3 text-sm text-white outline-none placeholder:text-neutral-600 focus:border-white/30"
-                  />
-
-                  <p className="mt-2 text-xs text-neutral-600">
-                    اگر خالی باشد، از نام دسته‌بندی ساخته می‌شود.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm text-neutral-400">
-                    توضیحات
-                  </label>
-
-                  <textarea
-                    value={
-                      form.description
-                    }
-                    onChange={(event) =>
-                      updateField(
-                        "description",
-                        event.target.value,
-                      )
-                    }
-                    rows={5}
-                    placeholder="توضیحات دسته‌بندی..."
-                    className="w-full resize-none rounded-xl border border-white/10 bg-neutral-900 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-neutral-600 focus:border-white/30"
-                  />
-                </div>
-              </div>
             </div>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
+            {/* Modal Footer */}
+            <div className="flex gap-2 border-t border-white/10 px-5 py-4">
               <button
                 type="button"
                 onClick={closeModal}
                 disabled={saving}
-                className="rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-medium transition hover:bg-white/10 disabled:opacity-50"
+                className="flex-1 rounded-xl border border-white/10 bg-[#050505] px-4 py-2.5 text-sm font-medium text-white/70 transition hover:bg-white/[0.04] disabled:opacity-50"
               >
                 انصراف
               </button>
 
               <button
                 type="button"
-                onClick={saveCategory}
+                onClick={() =>
+                  void saveCategory()
+                }
                 disabled={saving}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-7 py-3 text-sm font-bold text-neutral-950 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving && (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 )}
 
                 {editingCategory
@@ -773,6 +813,6 @@ function AdminCategoriesPage() {
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

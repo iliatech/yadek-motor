@@ -202,7 +202,7 @@ export const Route =
               );
 
             const providerName =
-              providerRaw || "mock";
+              providerRaw || "zarinpal";
 
             if (
               !isPaymentProviderName(

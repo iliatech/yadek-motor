@@ -27,28 +27,74 @@ import {
 import { fetchProduct } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+const SITE_URL = "https://diamondmotor.ir";
+
 export const Route = createFileRoute("/product/$productId")({
-  head: () => ({
-    meta: [
-      {
-        title: "جزئیات محصول | یدک موتور",
-      },
-      {
-        name: "description",
-        content:
-          "مشاهده مشخصات، قیمت و موجودی قطعه موتورسیکلت در فروشگاه یدک موتور.",
-      },
-      {
-        property: "og:title",
-        content: "جزئیات محصول | یدک موتور",
-      },
-      {
-        property: "og:description",
-        content:
-          "مشاهده مشخصات، قیمت و موجودی قطعه موتورسیکلت در فروشگاه یدک موتور.",
-      },
-    ],
-  }),
+  head: ({ params }) => {
+    const productId = params.productId;
+
+    const canonicalUrl = `${SITE_URL}/product/${encodeURIComponent(
+      productId,
+    )}`;
+
+    return {
+      meta: [
+        {
+          title: "محصول | یدک موتور",
+        },
+        {
+          name: "description",
+          content:
+            "مشاهده مشخصات، قیمت و موجودی قطعه موتورسیکلت در فروشگاه یدک موتور.",
+        },
+
+        /*
+         * Open Graph
+         */
+        {
+          property: "og:type",
+          content: "product",
+        },
+        {
+          property: "og:title",
+          content: "محصول | یدک موتور",
+        },
+        {
+          property: "og:description",
+          content:
+            "مشاهده مشخصات، قیمت و موجودی قطعه موتورسیکلت در فروشگاه یدک موتور.",
+        },
+        {
+          property: "og:url",
+          content: canonicalUrl,
+        },
+
+        /*
+         * Twitter
+         */
+        {
+          name: "twitter:card",
+          content: "summary_large_image",
+        },
+        {
+          name: "twitter:title",
+          content: "محصول | یدک موتور",
+        },
+        {
+          name: "twitter:description",
+          content:
+            "مشاهده مشخصات، قیمت و موجودی قطعه موتورسیکلت در فروشگاه یدک موتور.",
+        },
+      ],
+
+      links: [
+        {
+          rel: "canonical",
+          href: canonicalUrl,
+        },
+      ],
+    };
+  },
 
   component: ProductDetailPage,
 });
@@ -89,16 +135,18 @@ function ProductDetailPage() {
             }
           : {}),
 
-image: apiProduct.image
-  ? apiProduct.image.startsWith("/")
-    ? apiProduct.image
-    : `/products/${apiProduct.image}`
-  : "/products/placeholder.webp",
-images: (apiProduct.images ?? []).map((image) =>
-  image.startsWith("/")
-    ? image
-    : `/products/${image}`,
-),
+        image: apiProduct.image
+          ? apiProduct.image.startsWith("/")
+            ? apiProduct.image
+            : `/products/${apiProduct.image}`
+          : "/products/placeholder.webp",
+
+        images: (apiProduct.images ?? []).map((image) =>
+          image.startsWith("/")
+            ? image
+            : `/products/${image}`,
+        ),
+
         availability: apiProduct.availability,
         rating: apiProduct.rating,
         reviews: apiProduct.reviews,
@@ -115,7 +163,7 @@ images: (apiProduct.images ?? []).map((image) =>
     : null;
 
   /*
-   * حالت Loading
+   * Loading
    */
   if (isLoading) {
     return (
@@ -134,7 +182,7 @@ images: (apiProduct.images ?? []).map((image) =>
   }
 
   /*
-   * خطا یا محصول پیدا نشد
+   * Error / 404
    */
   if (isError || !product) {
     return (
@@ -182,6 +230,75 @@ images: (apiProduct.images ?? []).map((image) =>
 
   const isAvailable =
     product.availability !== "out-of-stock";
+
+  const productUrl = `${SITE_URL}/product/${encodeURIComponent(
+    productId,
+  )}`;
+
+  const productImage =
+    product.image.startsWith("http://") ||
+    product.image.startsWith("https://")
+      ? product.image
+      : `${SITE_URL}${product.image}`;
+
+  const productDescription =
+    getProductDescription(product);
+
+  /*
+   * Product JSON-LD
+   */
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+
+    name: product.name,
+
+    description: productDescription,
+
+    image: [
+      productImage,
+      ...getGallery(product)
+        .filter(
+          (image) => image !== product.image,
+        )
+        .map((image) =>
+          image.startsWith("http://") ||
+          image.startsWith("https://")
+            ? image
+            : `${SITE_URL}${image}`,
+        ),
+    ],
+
+    sku: getSku(product),
+
+    brand: {
+      "@type": "Brand",
+      name: product.brand,
+    },
+
+    category: product.category,
+
+    offers: {
+      "@type": "Offer",
+
+      url: productUrl,
+
+      priceCurrency: "IRR",
+
+      price: product.price,
+
+      availability:
+        product.availability === "in-stock"
+          ? "https://schema.org/InStock"
+          : product.availability ===
+              "low-stock"
+            ? "https://schema.org/LimitedAvailability"
+            : "https://schema.org/OutOfStock",
+
+      itemCondition:
+        "https://schema.org/NewCondition",
+    },
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -283,7 +400,11 @@ images: (apiProduct.images ?? []).map((image) =>
                   </span>
 
                   <span>
-                    از {toPersianDigits(product.reviews)} نظر
+                    از{" "}
+                    {toPersianDigits(
+                      product.reviews,
+                    )}{" "}
+                    نظر
                   </span>
                 </span>
 
@@ -292,11 +413,17 @@ images: (apiProduct.images ?? []).map((image) =>
                   <span
                     className={cn(
                       "h-2 w-2 rounded-full",
-                      dotColor[product.availability],
+                      dotColor[
+                        product.availability
+                      ],
                     )}
                   />
 
-                  {availabilityLabels[product.availability]}
+                  {
+                    availabilityLabels[
+                      product.availability
+                    ]
+                  }
                 </span>
 
                 {/* SKU */}
@@ -307,7 +434,7 @@ images: (apiProduct.images ?? []).map((image) =>
 
               {/* Description */}
               <p className="mt-6 text-sm leading-8 text-muted-foreground sm:text-base">
-                {getProductDescription(product)}
+                {productDescription}
               </p>
 
               {/* Benefits */}
@@ -353,8 +480,9 @@ images: (apiProduct.images ?? []).map((image) =>
               {/* Out of stock */}
               {!isAvailable && (
                 <p className="mt-4 rounded-lg border border-border bg-surface/40 px-4 py-3 text-xs leading-6 text-muted-foreground">
-                  این محصول در حال حاضر ناموجود است. می‌توانید
-                  محصولات مشابه را در پایین صفحه مشاهده کنید.
+                  این محصول در حال حاضر ناموجود است.
+                  می‌توانید محصولات مشابه را در پایین
+                  صفحه مشاهده کنید.
                 </p>
               )}
             </div>
@@ -373,6 +501,16 @@ images: (apiProduct.images ?? []).map((image) =>
       </main>
 
       <Footer />
+
+      {/* Product structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            productJsonLd,
+          ),
+        }}
+      />
     </div>
   );
 }

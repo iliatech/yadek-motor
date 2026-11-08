@@ -16,15 +16,15 @@ import {
 
 function getProductImageUrl(
   image: string | null | undefined,
-): string {
+): string | null {
   if (!image) {
-    return "/products/product-placeholder.webp";
+    return null;
   }
 
   const value = image.trim();
 
   if (!value) {
-    return "/products/product-placeholder.webp";
+    return null;
   }
 
   /*
@@ -39,26 +39,17 @@ function getProductImageUrl(
   }
 
   /*
-   * مسیر public
+   * مسیر API یا public
+   *
+   * مثال:
+   * /api/products/images/1
+   * /products/example.webp
    */
-  if (value.startsWith("/products/")) {
+  if (value.startsWith("/")) {
     return value;
   }
 
-  /*
-   * استخراج نام فایل
-   */
-  const fileName =
-    value
-      .split("/")
-      .pop()
-      ?.split("?")[0] ?? "";
-
-  if (!fileName) {
-    return "/products/product-placeholder.webp";
-  }
-
-  return `/products/${fileName}`;
+  return null;
 }
 
 /*
@@ -212,7 +203,7 @@ export const Route = createFileRoute(
 
           /*
            * =================================================
-           * دریافت گالری محصول
+           * دریافت تصاویر گالری
            * =================================================
            */
 
@@ -248,58 +239,71 @@ export const Route = createFileRoute(
             );
 
           /*
-           * تبدیل تصاویر به URL
+           * =================================================
+           * تبدیل تصاویر گالری به URLهای KV
+           *
+           * تصویر هر رکورد از طریق ID خودش
+           * از endpoint زیر دریافت می‌شود:
+           *
+           * /api/products/images/{imageId}
+           * =================================================
            */
 
           const gallery =
             sortedImages.map(
               (item) =>
-                getProductImageUrl(
-                  item.image,
-                ),
+                `/api/products/images/${item.id}`,
             );
 
           /*
            * =================================================
            * تصویر اصلی قدیمی
+           *
+           * اگر products.image خودش یک URL معتبر
+           * داشته باشد، آن را نگه می‌داریم.
+           * در غیر این صورت از اولین تصویر گالری
+           * استفاده می‌کنیم.
+           * =================================================
+           */
+
+          const legacyImage =
+            getProductImageUrl(
+              product.image,
+            );
+
+          /*
+           * =================================================
+           * تصویر اصلی
+           *
+           * اولویت:
+           * 1. اولین تصویر گالری KV
+           * 2. تصویر قدیمی معتبر
+           * 3. placeholder
            * =================================================
            */
 
           const mainImage =
-            product.image
-              ? getProductImageUrl(
-                  product.image,
-                )
-              : null;
+            gallery[0] ??
+            legacyImage ??
+            "/products/product-placeholder.webp";
 
           /*
-           * اگر image قدیمی در گالری نیست،
-           * آن را به ابتدای گالری اضافه می‌کنیم.
+           * =================================================
+           * گالری نهایی
+           *
+           * اگر تصویر اصلی قدیمی معتبر وجود داشته باشد
+           * و قبلاً داخل گالری نباشد، به ابتدا اضافه می‌شود.
+           * =================================================
            */
 
           const normalizedImages =
-            mainImage &&
-            !gallery.includes(
-              mainImage,
-            )
-              ? [
-                  mainImage,
-                  ...gallery,
-                ]
-              : gallery;
-
-          /*
-           * اگر هیچ تصویری وجود ندارد
-           */
-
-          if (
-            normalizedImages.length ===
-            0
-          ) {
-            normalizedImages.push(
-              "/products/product-placeholder.webp",
-            );
-          }
+            gallery.length > 0
+              ? gallery
+              : legacyImage
+                ? [legacyImage]
+                : [
+                    "/products/product-placeholder.webp",
+                  ];
 
           /*
            * =================================================
@@ -313,8 +317,7 @@ export const Route = createFileRoute(
             /*
              * تصویر اصلی
              */
-            image:
-              normalizedImages[0],
+            image: mainImage,
 
             /*
              * تمام تصاویر

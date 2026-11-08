@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
@@ -117,7 +117,7 @@ function toPersianDigits(value: string | number) {
 function formatPrice(value: number) {
   return `${toPersianDigits(
     Number(value).toLocaleString("en-US"),
-  )} تومان`;
+  )} ریال`;
 }
 
 function formatDate(value: string) {

@@ -9,7 +9,7 @@ import { toast } from "sonner";
 
 import {
   availabilityLabels,
-  formatToman,
+  formatRial,
   getDiscountPercent,
   toPersianDigits,
   type Product,
@@ -276,7 +276,7 @@ export function ProductCard({
                     num
                   "
                 >
-                  {formatToman(
+                  {formatRial(
                     product.oldPrice,
                   )}
                 </span>
@@ -291,7 +291,7 @@ export function ProductCard({
                     num
                   "
                 >
-                  {formatToman(
+                  {formatRial(
                     product.price,
                   )}
                 </span>
@@ -303,7 +303,7 @@ export function ProductCard({
                     text-muted-foreground
                   "
                 >
-                  تومان
+                  ریال
                 </span>
               </div>
             </div>

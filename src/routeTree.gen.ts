@@ -19,15 +19,22 @@ import { Route as ProfileAddressesRouteImport } from './routes/profile-addresses
 import { Route as ProfileOrdersRouteImport } from './routes/profile-orders'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ShopRouteImport } from './routes/shop'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminCategoriesRouteImport } from './routes/admin/categories'
 import { Route as AdminOrdersRouteImport } from './routes/admin/orders'
 import { Route as AdminProductsRouteImport } from './routes/admin/products'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as ApiCategoriesRouteImport } from './routes/api/categories'
+import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as ApiOrdersRouteImport } from './routes/api/orders'
 import { Route as ApiProductsRouteImport } from './routes/api.products'
+import { Route as ApiTestNoDbRouteImport } from './routes/api/test-no-db'
 import { Route as ApiUsersRouteImport } from './routes/api/users'
+import { Route as IndexBackupRouteImport } from './routes/index.backup'
+import { Route as ProductRouteImport } from './routes/product.'
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
+import { Route as AdminCategoriesCategoryIdRouteImport } from './routes/admin/categories.$categoryId'
 import { Route as AdminOrdersOrderIdRouteImport } from './routes/admin.orders.$orderId'
 import { Route as ApiAdminCategoriesRouteImport } from './routes/api/admin/categories'
 import { Route as ApiAdminDashboardRouteImport } from './routes/api/admin/dashboard'
@@ -38,12 +45,14 @@ import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
 import { Route as ApiAuthLogoutRouteImport } from './routes/api/auth/logout'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
+import { Route as ApiPaymentsCallbackRouteImport } from './routes/api/payments/callback'
 import { Route as ApiPaymentsCreateRouteImport } from './routes/api/payments/create'
 import { Route as ApiPaymentsVerifyRouteImport } from './routes/api/payments/verify'
 import { Route as ApiProductsProductIdRouteImport } from './routes/api.products.$productId'
 import { Route as ApiAdminProductsImagesRouteImport } from './routes/api.admin.products.images'
 import { Route as ApiAdminUploadsProductsRouteImport } from './routes/api.admin.uploads.products'
 import { Route as ApiAdminUsersPasswordRouteImport } from './routes/api.admin.users.password'
+import { Route as ApiProductsImagesImageIdRouteImport } from './routes/api.products.images.$imageId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -95,6 +104,11 @@ const ShopRoute = ShopRouteImport.update({
   path: '/shop',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
@@ -120,6 +134,16 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCategoriesRoute = ApiCategoriesRouteImport.update({
+  id: '/api/categories',
+  path: '/api/categories',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiOrdersRoute = ApiOrdersRouteImport.update({
   id: '/api/orders',
   path: '/api/orders',
@@ -130,9 +154,24 @@ const ApiProductsRoute = ApiProductsRouteImport.update({
   path: '/api/products',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTestNoDbRoute = ApiTestNoDbRouteImport.update({
+  id: '/api/test-no-db',
+  path: '/api/test-no-db',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUsersRoute = ApiUsersRouteImport.update({
   id: '/api/users',
   path: '/api/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexBackupRoute = IndexBackupRouteImport.update({
+  id: '/index/backup',
+  path: '/index/backup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductRoute = ProductRouteImport.update({
+  id: '/product/',
+  path: '/product/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductProductIdRoute = ProductProductIdRouteImport.update({
@@ -140,6 +179,12 @@ const ProductProductIdRoute = ProductProductIdRouteImport.update({
   path: '/product/$productId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminCategoriesCategoryIdRoute =
+  AdminCategoriesCategoryIdRouteImport.update({
+    id: '/$categoryId',
+    path: '/$categoryId',
+    getParentRoute: () => AdminCategoriesRoute,
+  } as any)
 const AdminOrdersOrderIdRoute = AdminOrdersOrderIdRouteImport.update({
   id: '/$orderId',
   path: '/$orderId',
@@ -190,6 +235,11 @@ const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
   path: '/api/auth/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPaymentsCallbackRoute = ApiPaymentsCallbackRouteImport.update({
+  id: '/api/payments/callback',
+  path: '/api/payments/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPaymentsCreateRoute = ApiPaymentsCreateRouteImport.update({
   id: '/api/payments/create',
   path: '/api/payments/create',
@@ -220,6 +270,12 @@ const ApiAdminUsersPasswordRoute = ApiAdminUsersPasswordRouteImport.update({
   path: '/password',
   getParentRoute: () => ApiAdminUsersRoute,
 } as any)
+const ApiProductsImagesImageIdRoute =
+  ApiProductsImagesImageIdRouteImport.update({
+    id: '/images/$imageId',
+    path: '/images/$imageId',
+    getParentRoute: () => ApiProductsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -232,15 +288,22 @@ export interface FileRoutesByFullPath {
   '/profile-orders': typeof ProfileOrdersRoute
   '/register': typeof RegisterRoute
   '/shop': typeof ShopRoute
-  '/admin/categories': typeof AdminCategoriesRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/product/': typeof ProductRoute
+  '/admin/categories': typeof AdminCategoriesRouteWithChildren
   '/admin/orders': typeof AdminOrdersRouteWithChildren
   '/admin/products': typeof AdminProductsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/api/categories': typeof ApiCategoriesRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/orders': typeof ApiOrdersRoute
   '/api/products': typeof ApiProductsRouteWithChildren
+  '/api/test-no-db': typeof ApiTestNoDbRoute
   '/api/users': typeof ApiUsersRoute
+  '/index/backup': typeof IndexBackupRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/admin/categories/$categoryId': typeof AdminCategoriesCategoryIdRoute
   '/admin/orders/$orderId': typeof AdminOrdersOrderIdRoute
   '/api/admin/categories': typeof ApiAdminCategoriesRoute
   '/api/admin/dashboard': typeof ApiAdminDashboardRoute
@@ -251,12 +314,14 @@ export interface FileRoutesByFullPath {
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/payments/callback': typeof ApiPaymentsCallbackRoute
   '/api/payments/create': typeof ApiPaymentsCreateRoute
   '/api/payments/verify': typeof ApiPaymentsVerifyRoute
   '/api/products/$productId': typeof ApiProductsProductIdRoute
   '/api/admin/products/images': typeof ApiAdminProductsImagesRoute
   '/api/admin/uploads/products': typeof ApiAdminUploadsProductsRoute
   '/api/admin/users/password': typeof ApiAdminUsersPasswordRoute
+  '/api/products/images/$imageId': typeof ApiProductsImagesImageIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -269,15 +334,22 @@ export interface FileRoutesByTo {
   '/profile-orders': typeof ProfileOrdersRoute
   '/register': typeof RegisterRoute
   '/shop': typeof ShopRoute
-  '/admin/categories': typeof AdminCategoriesRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/product': typeof ProductRoute
+  '/admin/categories': typeof AdminCategoriesRouteWithChildren
   '/admin/orders': typeof AdminOrdersRouteWithChildren
   '/admin/products': typeof AdminProductsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/api/categories': typeof ApiCategoriesRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/orders': typeof ApiOrdersRoute
   '/api/products': typeof ApiProductsRouteWithChildren
+  '/api/test-no-db': typeof ApiTestNoDbRoute
   '/api/users': typeof ApiUsersRoute
+  '/index/backup': typeof IndexBackupRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/admin': typeof AdminIndexRoute
+  '/admin/categories/$categoryId': typeof AdminCategoriesCategoryIdRoute
   '/admin/orders/$orderId': typeof AdminOrdersOrderIdRoute
   '/api/admin/categories': typeof ApiAdminCategoriesRoute
   '/api/admin/dashboard': typeof ApiAdminDashboardRoute
@@ -288,12 +360,14 @@ export interface FileRoutesByTo {
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/payments/callback': typeof ApiPaymentsCallbackRoute
   '/api/payments/create': typeof ApiPaymentsCreateRoute
   '/api/payments/verify': typeof ApiPaymentsVerifyRoute
   '/api/products/$productId': typeof ApiProductsProductIdRoute
   '/api/admin/products/images': typeof ApiAdminProductsImagesRoute
   '/api/admin/uploads/products': typeof ApiAdminUploadsProductsRoute
   '/api/admin/users/password': typeof ApiAdminUsersPasswordRoute
+  '/api/products/images/$imageId': typeof ApiProductsImagesImageIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -307,15 +381,22 @@ export interface FileRoutesById {
   '/profile-orders': typeof ProfileOrdersRoute
   '/register': typeof RegisterRoute
   '/shop': typeof ShopRoute
-  '/admin/categories': typeof AdminCategoriesRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/product/': typeof ProductRoute
+  '/admin/categories': typeof AdminCategoriesRouteWithChildren
   '/admin/orders': typeof AdminOrdersRouteWithChildren
   '/admin/products': typeof AdminProductsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/api/categories': typeof ApiCategoriesRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/orders': typeof ApiOrdersRoute
   '/api/products': typeof ApiProductsRouteWithChildren
+  '/api/test-no-db': typeof ApiTestNoDbRoute
   '/api/users': typeof ApiUsersRoute
+  '/index/backup': typeof IndexBackupRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/admin/categories/$categoryId': typeof AdminCategoriesCategoryIdRoute
   '/admin/orders/$orderId': typeof AdminOrdersOrderIdRoute
   '/api/admin/categories': typeof ApiAdminCategoriesRoute
   '/api/admin/dashboard': typeof ApiAdminDashboardRoute
@@ -326,12 +407,14 @@ export interface FileRoutesById {
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/payments/callback': typeof ApiPaymentsCallbackRoute
   '/api/payments/create': typeof ApiPaymentsCreateRoute
   '/api/payments/verify': typeof ApiPaymentsVerifyRoute
   '/api/products/$productId': typeof ApiProductsProductIdRoute
   '/api/admin/products/images': typeof ApiAdminProductsImagesRoute
   '/api/admin/uploads/products': typeof ApiAdminUploadsProductsRoute
   '/api/admin/users/password': typeof ApiAdminUsersPasswordRoute
+  '/api/products/images/$imageId': typeof ApiProductsImagesImageIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -346,15 +429,22 @@ export interface FileRouteTypes {
     | '/profile-orders'
     | '/register'
     | '/shop'
+    | '/sitemap.xml'
+    | '/product/'
     | '/admin/categories'
     | '/admin/orders'
     | '/admin/products'
     | '/admin/users'
+    | '/api/categories'
+    | '/api/health'
     | '/api/orders'
     | '/api/products'
+    | '/api/test-no-db'
     | '/api/users'
+    | '/index/backup'
     | '/product/$productId'
     | '/admin/'
+    | '/admin/categories/$categoryId'
     | '/admin/orders/$orderId'
     | '/api/admin/categories'
     | '/api/admin/dashboard'
@@ -365,12 +455,14 @@ export interface FileRouteTypes {
     | '/api/auth/logout'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/payments/callback'
     | '/api/payments/create'
     | '/api/payments/verify'
     | '/api/products/$productId'
     | '/api/admin/products/images'
     | '/api/admin/uploads/products'
     | '/api/admin/users/password'
+    | '/api/products/images/$imageId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -383,15 +475,22 @@ export interface FileRouteTypes {
     | '/profile-orders'
     | '/register'
     | '/shop'
+    | '/sitemap.xml'
+    | '/product'
     | '/admin/categories'
     | '/admin/orders'
     | '/admin/products'
     | '/admin/users'
+    | '/api/categories'
+    | '/api/health'
     | '/api/orders'
     | '/api/products'
+    | '/api/test-no-db'
     | '/api/users'
+    | '/index/backup'
     | '/product/$productId'
     | '/admin'
+    | '/admin/categories/$categoryId'
     | '/admin/orders/$orderId'
     | '/api/admin/categories'
     | '/api/admin/dashboard'
@@ -402,12 +501,14 @@ export interface FileRouteTypes {
     | '/api/auth/logout'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/payments/callback'
     | '/api/payments/create'
     | '/api/payments/verify'
     | '/api/products/$productId'
     | '/api/admin/products/images'
     | '/api/admin/uploads/products'
     | '/api/admin/users/password'
+    | '/api/products/images/$imageId'
   id:
     | '__root__'
     | '/'
@@ -420,15 +521,22 @@ export interface FileRouteTypes {
     | '/profile-orders'
     | '/register'
     | '/shop'
+    | '/sitemap.xml'
+    | '/product/'
     | '/admin/categories'
     | '/admin/orders'
     | '/admin/products'
     | '/admin/users'
+    | '/api/categories'
+    | '/api/health'
     | '/api/orders'
     | '/api/products'
+    | '/api/test-no-db'
     | '/api/users'
+    | '/index/backup'
     | '/product/$productId'
     | '/admin/'
+    | '/admin/categories/$categoryId'
     | '/admin/orders/$orderId'
     | '/api/admin/categories'
     | '/api/admin/dashboard'
@@ -439,12 +547,14 @@ export interface FileRouteTypes {
     | '/api/auth/logout'
     | '/api/auth/me'
     | '/api/auth/register'
+    | '/api/payments/callback'
     | '/api/payments/create'
     | '/api/payments/verify'
     | '/api/products/$productId'
     | '/api/admin/products/images'
     | '/api/admin/uploads/products'
     | '/api/admin/users/password'
+    | '/api/products/images/$imageId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -458,13 +568,19 @@ export interface RootRouteChildren {
   ProfileOrdersRoute: typeof ProfileOrdersRoute
   RegisterRoute: typeof RegisterRoute
   ShopRoute: typeof ShopRoute
-  AdminCategoriesRoute: typeof AdminCategoriesRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  ProductRoute: typeof ProductRoute
+  AdminCategoriesRoute: typeof AdminCategoriesRouteWithChildren
   AdminOrdersRoute: typeof AdminOrdersRouteWithChildren
   AdminProductsRoute: typeof AdminProductsRoute
   AdminUsersRoute: typeof AdminUsersRoute
+  ApiCategoriesRoute: typeof ApiCategoriesRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiOrdersRoute: typeof ApiOrdersRoute
   ApiProductsRoute: typeof ApiProductsRouteWithChildren
+  ApiTestNoDbRoute: typeof ApiTestNoDbRoute
   ApiUsersRoute: typeof ApiUsersRoute
+  IndexBackupRoute: typeof IndexBackupRoute
   ProductProductIdRoute: typeof ProductProductIdRoute
   AdminIndexRoute: typeof AdminIndexRoute
   ApiAdminCategoriesRoute: typeof ApiAdminCategoriesRoute
@@ -476,6 +592,7 @@ export interface RootRouteChildren {
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
   ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
+  ApiPaymentsCallbackRoute: typeof ApiPaymentsCallbackRoute
   ApiPaymentsCreateRoute: typeof ApiPaymentsCreateRoute
   ApiPaymentsVerifyRoute: typeof ApiPaymentsVerifyRoute
   ApiAdminUploadsProductsRoute: typeof ApiAdminUploadsProductsRoute
@@ -553,6 +670,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShopRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/': {
       id: '/admin/'
       path: '/admin'
@@ -588,6 +712,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/categories': {
+      id: '/api/categories'
+      path: '/api/categories'
+      fullPath: '/api/categories'
+      preLoaderRoute: typeof ApiCategoriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/orders': {
       id: '/api/orders'
       path: '/api/orders'
@@ -602,11 +740,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProductsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/test-no-db': {
+      id: '/api/test-no-db'
+      path: '/api/test-no-db'
+      fullPath: '/api/test-no-db'
+      preLoaderRoute: typeof ApiTestNoDbRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/users': {
       id: '/api/users'
       path: '/api/users'
       fullPath: '/api/users'
       preLoaderRoute: typeof ApiUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/index/backup': {
+      id: '/index/backup'
+      path: '/index/backup'
+      fullPath: '/index/backup'
+      preLoaderRoute: typeof IndexBackupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product/': {
+      id: '/product/'
+      path: '/product'
+      fullPath: '/product/'
+      preLoaderRoute: typeof ProductRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/product/$productId': {
@@ -615,6 +774,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/product/$productId'
       preLoaderRoute: typeof ProductProductIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/categories/$categoryId': {
+      id: '/admin/categories/$categoryId'
+      path: '/$categoryId'
+      fullPath: '/admin/categories/$categoryId'
+      preLoaderRoute: typeof AdminCategoriesCategoryIdRouteImport
+      parentRoute: typeof AdminCategoriesRoute
     }
     '/admin/orders/$orderId': {
       id: '/admin/orders/$orderId'
@@ -686,6 +852,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthRegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/payments/callback': {
+      id: '/api/payments/callback'
+      path: '/api/payments/callback'
+      fullPath: '/api/payments/callback'
+      preLoaderRoute: typeof ApiPaymentsCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/payments/create': {
       id: '/api/payments/create'
       path: '/api/payments/create'
@@ -728,8 +901,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminUsersPasswordRouteImport
       parentRoute: typeof ApiAdminUsersRoute
     }
+    '/api/products/images/$imageId': {
+      id: '/api/products/images/$imageId'
+      path: '/images/$imageId'
+      fullPath: '/api/products/images/$imageId'
+      preLoaderRoute: typeof ApiProductsImagesImageIdRouteImport
+      parentRoute: typeof ApiProductsRoute
+    }
   }
 }
+
+interface AdminCategoriesRouteChildren {
+  AdminCategoriesCategoryIdRoute: typeof AdminCategoriesCategoryIdRoute
+}
+
+const AdminCategoriesRouteChildren: AdminCategoriesRouteChildren = {
+  AdminCategoriesCategoryIdRoute: AdminCategoriesCategoryIdRoute,
+}
+
+const AdminCategoriesRouteWithChildren = AdminCategoriesRoute._addFileChildren(
+  AdminCategoriesRouteChildren,
+)
 
 interface AdminOrdersRouteChildren {
   AdminOrdersOrderIdRoute: typeof AdminOrdersOrderIdRoute
@@ -745,10 +937,12 @@ const AdminOrdersRouteWithChildren = AdminOrdersRoute._addFileChildren(
 
 interface ApiProductsRouteChildren {
   ApiProductsProductIdRoute: typeof ApiProductsProductIdRoute
+  ApiProductsImagesImageIdRoute: typeof ApiProductsImagesImageIdRoute
 }
 
 const ApiProductsRouteChildren: ApiProductsRouteChildren = {
   ApiProductsProductIdRoute: ApiProductsProductIdRoute,
+  ApiProductsImagesImageIdRoute: ApiProductsImagesImageIdRoute,
 }
 
 const ApiProductsRouteWithChildren = ApiProductsRoute._addFileChildren(
@@ -789,13 +983,19 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileOrdersRoute: ProfileOrdersRoute,
   RegisterRoute: RegisterRoute,
   ShopRoute: ShopRoute,
-  AdminCategoriesRoute: AdminCategoriesRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
+  ProductRoute: ProductRoute,
+  AdminCategoriesRoute: AdminCategoriesRouteWithChildren,
   AdminOrdersRoute: AdminOrdersRouteWithChildren,
   AdminProductsRoute: AdminProductsRoute,
   AdminUsersRoute: AdminUsersRoute,
+  ApiCategoriesRoute: ApiCategoriesRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ApiOrdersRoute: ApiOrdersRoute,
   ApiProductsRoute: ApiProductsRouteWithChildren,
+  ApiTestNoDbRoute: ApiTestNoDbRoute,
   ApiUsersRoute: ApiUsersRoute,
+  IndexBackupRoute: IndexBackupRoute,
   ProductProductIdRoute: ProductProductIdRoute,
   AdminIndexRoute: AdminIndexRoute,
   ApiAdminCategoriesRoute: ApiAdminCategoriesRoute,
@@ -807,6 +1007,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
   ApiAuthRegisterRoute: ApiAuthRegisterRoute,
+  ApiPaymentsCallbackRoute: ApiPaymentsCallbackRoute,
   ApiPaymentsCreateRoute: ApiPaymentsCreateRoute,
   ApiPaymentsVerifyRoute: ApiPaymentsVerifyRoute,
   ApiAdminUploadsProductsRoute: ApiAdminUploadsProductsRoute,

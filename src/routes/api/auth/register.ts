@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+
 import { createFileRoute } from "@tanstack/react-router";
 
 import { db } from "@/db";
@@ -12,19 +13,6 @@ import {
 
 /*
  * =========================================================
- * Constants
- * =========================================================
- */
-
-const MIN_PASSWORD_LENGTH = 8;
-const MAX_PASSWORD_LENGTH = 200;
-
-const MAX_NAME_LENGTH = 100;
-const MAX_PHONE_LENGTH = 20;
-const MAX_EMAIL_LENGTH = 254;
-
-/*
- * =========================================================
  * Helpers
  * =========================================================
  */
@@ -34,31 +22,17 @@ function normalizeDigits(value: string) {
     /[۰-۹]/g,
     (digit) =>
       String(
-        "۰۱۲۳۴۵۶۷۸۹".indexOf(digit),
+        "۰۱۲۳۴۵۶۷۸۹".indexOf(
+          digit,
+        ),
       ),
   );
 }
 
 function createUserId() {
-  return `user_${crypto.randomUUID()}`;
-}
-
-function jsonResponse(
-  data: unknown,
-  status = 200,
-  extraHeaders: HeadersInit = {},
-) {
-  return new Response(
-    JSON.stringify(data),
-    {
-      status,
-      headers: {
-        "Content-Type":
-          "application/json",
-        ...extraHeaders,
-      },
-    },
-  );
+  return `user_${Date.now()}_${Math.random()
+    .toString(36)
+    .substring(2, 10)}`;
 }
 
 /*
@@ -95,6 +69,31 @@ async function hashPassword(
 
 /*
  * =========================================================
+ * JSON Response
+ * =========================================================
+ */
+
+function jsonResponse(
+  data: unknown,
+  status = 200,
+  extraHeaders?: HeadersInit,
+) {
+  return new Response(
+    JSON.stringify(data),
+    {
+      status: status,
+      headers: {
+        "Content-Type":
+          "application/json",
+
+        ...extraHeaders,
+      },
+    },
+  );
+}
+
+/*
+ * =========================================================
  * Route
  * =========================================================
  */
@@ -104,7 +103,9 @@ export const Route = createFileRoute(
 )({
   server: {
     handlers: {
-      POST: async ({ request }) => {
+      POST: async ({
+        request,
+      }) => {
         try {
           /*
            * =================================================
@@ -112,82 +113,99 @@ export const Route = createFileRoute(
            * =================================================
            */
 
-          let body: Record<
-            string,
-            unknown
-          >;
+          const parsedBody =
+            await request.json();
 
-          try {
-            const parsed =
-              await request.json();
-
-            if (
-              !parsed ||
-              typeof parsed !==
-                "object" ||
-              Array.isArray(parsed)
-            ) {
-              return jsonResponse(
-                {
-                  success: false,
-                  error:
-                    "داده‌های ارسالی معتبر نیستند.",
-                },
-                400,
-              );
-            }
-
-            body =
-              parsed as Record<
-                string,
-                unknown
-              >;
-          } catch {
+          if (
+            !parsedBody ||
+            typeof parsedBody !==
+              "object" ||
+            Array.isArray(
+              parsedBody,
+            )
+          ) {
             return jsonResponse(
               {
                 success: false,
+
                 error:
-                  "داده‌های ارسالی معتبر نیستند.",
+                  "بدنه درخواست نامعتبر است.",
               },
+
               400,
             );
           }
 
+          const body =
+            parsedBody as Record<
+              string,
+              unknown
+            >;
+
+          /*
+           * =================================================
+           * Extract Fields
+           * =================================================
+           */
+
           const firstName =
-            typeof body.firstName ===
-            "string"
-              ? body.firstName.trim()
+            typeof body[
+              "firstName"
+            ] === "string"
+              ? (
+                  body[
+                    "firstName"
+                  ] as string
+                ).trim()
               : "";
 
           const lastName =
-            typeof body.lastName ===
-            "string"
-              ? body.lastName.trim()
+            typeof body[
+              "lastName"
+            ] === "string"
+              ? (
+                  body[
+                    "lastName"
+                  ] as string
+                ).trim()
               : "";
 
           const phone =
-            typeof body.phone ===
-            "string"
+            typeof body[
+              "phone"
+            ] === "string"
               ? normalizeDigits(
-                  body.phone.trim(),
+                  (
+                    body[
+                      "phone"
+                    ] as string
+                  ).trim(),
                 )
               : "";
 
           const email =
-            typeof body.email ===
-            "string"
-              ? body.email.trim()
+            typeof body[
+              "email"
+            ] === "string"
+              ? (
+                  body[
+                    "email"
+                  ] as string
+                ).trim()
               : "";
 
           const password =
-            typeof body.password ===
-            "string"
-              ? body.password
+            typeof body[
+              "password"
+            ] === "string"
+              ? (body[
+                  "password"
+                ] as string)
               : "";
 
           /*
            * =================================================
-           * Basic Validation
+           * Required Fields Validation
            * =================================================
            */
 
@@ -195,23 +213,11 @@ export const Route = createFileRoute(
             return jsonResponse(
               {
                 success: false,
+
                 error:
                   "نام خود را وارد کنید.",
               },
-              400,
-            );
-          }
 
-          if (
-            firstName.length >
-            MAX_NAME_LENGTH
-          ) {
-            return jsonResponse(
-              {
-                success: false,
-                error:
-                  "نام واردشده بیش از حد طولانی است.",
-              },
               400,
             );
           }
@@ -220,23 +226,11 @@ export const Route = createFileRoute(
             return jsonResponse(
               {
                 success: false,
+
                 error:
                   "نام خانوادگی خود را وارد کنید.",
               },
-              400,
-            );
-          }
 
-          if (
-            lastName.length >
-            MAX_NAME_LENGTH
-          ) {
-            return jsonResponse(
-              {
-                success: false,
-                error:
-                  "نام خانوادگی واردشده بیش از حد طولانی است.",
-              },
               400,
             );
           }
@@ -245,23 +239,11 @@ export const Route = createFileRoute(
             return jsonResponse(
               {
                 success: false,
+
                 error:
                   "شماره تماس خود را وارد کنید.",
               },
-              400,
-            );
-          }
 
-          if (
-            phone.length >
-            MAX_PHONE_LENGTH
-          ) {
-            return jsonResponse(
-              {
-                success: false,
-                error:
-                  "شماره تماس واردشده معتبر نیست.",
-              },
               400,
             );
           }
@@ -270,37 +252,11 @@ export const Route = createFileRoute(
             return jsonResponse(
               {
                 success: false,
+
                 error:
                   "رمز عبور خود را وارد کنید.",
               },
-              400,
-            );
-          }
 
-          if (
-            password.length <
-            MIN_PASSWORD_LENGTH
-          ) {
-            return jsonResponse(
-              {
-                success: false,
-                error:
-                  "رمز عبور باید حداقل ۸ کاراکتر باشد.",
-              },
-              400,
-            );
-          }
-
-          if (
-            password.length >
-            MAX_PASSWORD_LENGTH
-          ) {
-            return jsonResponse(
-              {
-                success: false,
-                error:
-                  "رمز عبور بیش از حد طولانی است.",
-              },
               400,
             );
           }
@@ -315,14 +271,39 @@ export const Route = createFileRoute(
             /^09\d{9}$/;
 
           if (
-            !phoneRegex.test(phone)
+            !phoneRegex.test(
+              phone,
+            )
           ) {
             return jsonResponse(
               {
                 success: false,
+
                 error:
                   "شماره تماس واردشده معتبر نیست.",
               },
+
+              400,
+            );
+          }
+
+          /*
+           * =================================================
+           * Password Validation
+           * =================================================
+           */
+
+          if (
+            password.length < 8
+          ) {
+            return jsonResponse(
+              {
+                success: false,
+
+                error:
+                  "رمز عبور باید حداقل ۸ کاراکتر باشد.",
+              },
+
               400,
             );
           }
@@ -334,32 +315,22 @@ export const Route = createFileRoute(
            */
 
           if (email) {
-            if (
-              email.length >
-              MAX_EMAIL_LENGTH
-            ) {
-              return jsonResponse(
-                {
-                  success: false,
-                  error:
-                    "ایمیل واردشده بیش از حد طولانی است.",
-                },
-                400,
-              );
-            }
-
             const emailRegex =
               /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
             if (
-              !emailRegex.test(email)
+              !emailRegex.test(
+                email,
+              )
             ) {
               return jsonResponse(
                 {
                   success: false,
+
                   error:
                     "ایمیل واردشده معتبر نیست.",
                 },
+
                 400,
               );
             }
@@ -372,28 +343,38 @@ export const Route = createFileRoute(
            */
 
           const existingUsers =
-            await db
-              .select({
-                id: users.id,
-              })
-              .from(users)
-              .where(
-                eq(
-                  users.phone,
-                  phone,
-                ),
-              )
-              .limit(1);
+            await db[
+              "select"
+            ]({
+              id: users["id"],
+            })[
+              "from"
+            ](
+              users,
+            )[
+              "where"
+            ](
+              eq(
+                users["phone"],
+                phone,
+              ),
+            )[
+              "limit"
+            ](1);
 
           if (
-            existingUsers.length > 0
+            existingUsers[
+              "length"
+            ] > 0
           ) {
             return jsonResponse(
               {
                 success: false,
+
                 error:
                   "این شماره تماس قبلاً ثبت شده است.",
               },
+
               409,
             );
           }
@@ -419,30 +400,54 @@ export const Route = createFileRoute(
             createUserId();
 
           const insertedUsers =
-            await db
-              .insert(users)
-              .values({
-                id: userId,
+            await db[
+              "insert"
+            ](
+              users,
+            )[
+              "values"
+            ]({
+              id: userId,
+
+              firstName:
                 firstName,
+
+              lastName:
                 lastName,
-                phone,
-                email:
-                  email || null,
+
+              phone: phone,
+
+              email:
+                email || null,
+
+              passwordHash:
                 passwordHash,
-              })
-              .returning({
-                id: users.id,
-                firstName:
-                  users.firstName,
-                lastName:
-                  users.lastName,
-                phone:
-                  users.phone,
-                email:
-                  users.email,
-                createdAt:
-                  users.createdAt,
-              });
+            })[
+              "returning"
+            ]({
+              id: users["id"],
+
+              firstName:
+                users[
+                  "firstName"
+                ],
+
+              lastName:
+                users[
+                  "lastName"
+                ],
+
+              phone:
+                users["phone"],
+
+              email:
+                users["email"],
+
+              createdAt:
+                users[
+                  "createdAt"
+                ],
+            });
 
           const user =
             insertedUsers[0];
@@ -461,7 +466,7 @@ export const Route = createFileRoute(
 
           const session =
             await createSession(
-              user.id,
+              user["id"],
             );
 
           /*
@@ -475,15 +480,20 @@ export const Route = createFileRoute(
 
           const cookieParts = [
             `${SESSION_COOKIE_NAME}=${encodeURIComponent(
-              session.id,
+              session["id"],
             )}`,
-            `Path=${cookieOptions.path}`,
-            `Max-Age=${cookieOptions.maxAge}`,
-            `SameSite=${cookieOptions.sameSite}`,
+
+            `Path=${cookieOptions["path"]}`,
+
+            `Max-Age=${cookieOptions["maxAge"]}`,
+
+            `SameSite=${cookieOptions["sameSite"]}`,
           ];
 
           if (
-            cookieOptions.httpOnly
+            cookieOptions[
+              "httpOnly"
+            ]
           ) {
             cookieParts.push(
               "HttpOnly",
@@ -491,7 +501,9 @@ export const Route = createFileRoute(
           }
 
           if (
-            cookieOptions.secure
+            cookieOptions[
+              "secure"
+            ]
           ) {
             cookieParts.push(
               "Secure",
@@ -507,15 +519,26 @@ export const Route = createFileRoute(
           return jsonResponse(
             {
               success: true,
-              authenticated: true,
-              user,
+
+              authenticated:
+                true,
+
+              user: user,
+
               session: {
-                id: session.id,
+                id: session[
+                  "id"
+                ],
+
                 expiresAt:
-                  session.expiresAt,
+                  session[
+                    "expiresAt"
+                  ],
               },
             },
+
             201,
+
             {
               "Set-Cookie":
                 cookieParts.join(
@@ -532,9 +555,11 @@ export const Route = createFileRoute(
           return jsonResponse(
             {
               success: false,
+
               error:
                 "خطا در ایجاد حساب کاربری.",
             },
+
             500,
           );
         }

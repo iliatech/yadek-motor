@@ -60,6 +60,21 @@ type ProductsResponse = {
   message?: string;
 };
 
+type Category = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  productCount: number;
+};
+
+type CategoriesResponse = {
+  success: boolean;
+  categories?: Category[];
+  count?: number;
+  message?: string;
+};
+
 type ProductForm = {
   name: string;
   slug: string;
@@ -152,6 +167,8 @@ const AVAILABILITY_OPTIONS: {
 ];
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_WEBP_DIMENSION = 1920;
+const WEBP_QUALITY = 0.84;
 
 const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
@@ -255,6 +272,180 @@ function getImageUrl(
   return `/products/${normalized}`;
 }
 
+/*
+ * =========================================================
+ * Convert Image To WebP
+ * =========================================================
+ */
+
+async function convertImageToWebP(
+  file: File,
+): Promise<File> {
+  if (
+    !ALLOWED_IMAGE_TYPES.includes(
+      file.type,
+    )
+  ) {
+    throw new Error(
+      `فرمت فایل «${file.name}» معتبر نیست. فقط JPG، JPEG، PNG یا WEBP مجاز است.`,
+    );
+  }
+
+  if (file.size <= 0) {
+    throw new Error(
+      `فایل «${file.name}» خالی است.`,
+    );
+  }
+
+  if (file.size > MAX_IMAGE_SIZE) {
+    throw new Error(
+      `حجم فایل «${file.name}» بیشتر از ۵ مگابایت است.`,
+    );
+  }
+
+  const objectUrl =
+    URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>(
+      (resolve, reject) => {
+        const img = new Image();
+
+        img.onload = () => {
+          resolve(img);
+        };
+
+        img.onerror = () => {
+          reject(
+            new Error(
+              `خواندن تصویر «${file.name}» امکان‌پذیر نیست.`,
+            ),
+          );
+        };
+
+        img.src = objectUrl;
+      },
+    );
+
+    const originalWidth =
+      image.naturalWidth;
+
+    const originalHeight =
+      image.naturalHeight;
+
+    if (
+      originalWidth <= 0 ||
+      originalHeight <= 0
+    ) {
+      throw new Error(
+        `ابعاد تصویر «${file.name}» معتبر نیست.`,
+      );
+    }
+
+    const maxDimension = Math.max(
+      originalWidth,
+      originalHeight,
+    );
+
+    const scale =
+      maxDimension >
+      MAX_WEBP_DIMENSION
+        ? MAX_WEBP_DIMENSION /
+          maxDimension
+        : 1;
+
+    const width = Math.max(
+      1,
+      Math.round(
+        originalWidth * scale,
+      ),
+    );
+
+    const height = Math.max(
+      1,
+      Math.round(
+        originalHeight * scale,
+      ),
+    );
+
+    const canvas =
+      document.createElement("canvas");
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const context =
+      canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error(
+        "امکان پردازش تصویر در مرورگر وجود ندارد.",
+      );
+    }
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality =
+      "high";
+
+    context.drawImage(
+      image,
+      0,
+      0,
+      width,
+      height,
+    );
+
+    const blob =
+      await new Promise<Blob | null>(
+        (resolve) => {
+          canvas.toBlob(
+            resolve,
+            "image/webp",
+            WEBP_QUALITY,
+          );
+        },
+      );
+
+    if (!blob) {
+      throw new Error(
+        `تبدیل تصویر «${file.name}» به WebP ناموفق بود.`,
+      );
+    }
+
+    if (blob.size <= 0) {
+      throw new Error(
+        `فایل WebP تولیدشده برای «${file.name}» خالی است.`,
+      );
+    }
+
+    if (blob.size > MAX_IMAGE_SIZE) {
+      throw new Error(
+        `حجم تصویر تبدیل‌شده «${file.name}» هنوز بیشتر از ۵ مگابایت است.`,
+      );
+    }
+
+    const originalName =
+      file.name.replace(
+        /\.[^/.]+$/,
+        "",
+      );
+
+    return new File(
+      [blob],
+      `${originalName}.webp`,
+      {
+        type: "image/webp",
+        lastModified:
+          Date.now(),
+      },
+    );
+  } finally {
+    URL.revokeObjectURL(
+      objectUrl,
+    );
+  }
+}
+
 function productToForm(
   product: Product,
 ): ProductForm {
@@ -287,6 +478,12 @@ function productToForm(
 function AdminProductsPage() {
   const [products, setProducts] =
     useState<Product[]>([]);
+
+  const [categories, setCategories] =
+    useState<Category[]>([]);
+
+  const [categoriesLoading, setCategoriesLoading] =
+    useState(true);
 
   const [loading, setLoading] =
     useState(true);
@@ -321,8 +518,27 @@ function AdminProductsPage() {
   const [pendingImages, setPendingImages] =
     useState<PendingImage[]>([]);
 
+  const pendingImagesRef =
+    useRef<PendingImage[]>([]);
+
   const fileInputRef =
     useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    pendingImagesRef.current =
+      pendingImages;
+  }, [pendingImages]);
+
+  useEffect(() => {
+    return () => {
+      for (const item of
+        pendingImagesRef.current) {
+        URL.revokeObjectURL(
+          item.preview,
+        );
+      }
+    };
+  }, []);
 
   /*
    * =========================================================
@@ -330,56 +546,56 @@ function AdminProductsPage() {
    * =========================================================
    */
 
-const loadProducts = useCallback(
-  async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const response = await fetch(
-        "/api/admin/products",
-      );
-
-      let data: ProductsResponse;
-
+  const loadProducts = useCallback(
+    async () => {
       try {
-        data =
-          (await response.json()) as ProductsResponse;
-      } catch {
-        throw new Error(
-          "پاسخ نامعتبر از سرور دریافت شد.",
+        setLoading(true);
+        setError("");
+
+        const response = await fetch(
+          "/api/admin/products",
         );
-      }
 
-      if (!response.ok) {
-        throw new Error(
-          data.message ??
-            "دریافت محصولات ناموفق بود.",
+        let data: ProductsResponse;
+
+        try {
+          data =
+            (await response.json()) as ProductsResponse;
+        } catch {
+          throw new Error(
+            "پاسخ نامعتبر از سرور دریافت شد.",
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ??
+              "دریافت محصولات ناموفق بود.",
+          );
+        }
+
+        setProducts(
+          Array.isArray(data.products)
+            ? data.products
+            : [],
         );
+      } catch (err) {
+        console.error(
+          "ADMIN PRODUCTS ERROR:",
+          err,
+        );
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "خطا در دریافت محصولات.",
+        );
+      } finally {
+        setLoading(false);
       }
-
-      setProducts(
-        Array.isArray(data.products)
-          ? data.products
-          : [],
-      );
-    } catch (err) {
-      console.error(
-        "ADMIN PRODUCTS ERROR:",
-        err,
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "خطا در دریافت محصولات.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  },
-  [],
-);
+    },
+    [],
+  );
 
   useEffect(() => {
     void loadProducts();
@@ -387,51 +603,84 @@ const loadProducts = useCallback(
 
   /*
    * =========================================================
-   * Cleanup Preview URLs
+   * Load Categories independently from products
    * =========================================================
    */
+
+  const loadCategories = useCallback(
+    async () => {
+      try {
+        setCategoriesLoading(true);
+
+        const response = await fetch(
+          "/api/admin/categories",
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
+            credentials: "same-origin",
+          },
+        );
+
+        let data: CategoriesResponse;
+
+        try {
+          data = (await response.json()) as CategoriesResponse;
+        } catch {
+          throw new Error(
+            "پاسخ دسته‌بندی‌ها از سرور معتبر نیست.",
+          );
+        }
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.message ??
+              (response.status === 401 || response.status === 403
+                ? "برای دریافت دسته‌بندی‌ها باید با حساب مدیر وارد شوید."
+                : "دریافت دسته‌بندی‌ها ناموفق بود."),
+          );
+        }
+
+        const validCategories = Array.isArray(data.categories)
+          ? data.categories.filter(
+              (category) =>
+                Number.isInteger(Number(category.id)) &&
+                Number(category.id) > 0 &&
+                typeof category.name === "string" &&
+                category.name.trim().length > 0,
+            )
+          : [];
+
+        setCategories(
+          validCategories
+            .map((category) => ({
+              ...category,
+              id: Number(category.id),
+              productCount: Number(category.productCount ?? 0),
+            }))
+            .sort((a, b) =>
+              a.name.localeCompare(b.name, "fa"),
+            ),
+        );
+      } catch (err) {
+        console.error("ADMIN CATEGORIES ERROR:", err);
+        setCategories([]);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "خطا در دریافت دسته‌بندی‌ها.",
+        );
+      } finally {
+        setCategoriesLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    return () => {
-      for (const item of pendingImages) {
-        URL.revokeObjectURL(item.preview);
-      }
-    };
-  }, [pendingImages]);
-
-  /*
-   * =========================================================
-   * Categories
-   * =========================================================
-   */
-
-  const categories = useMemo(() => {
-    const map = new Map<
-      number,
-      string
-    >();
-
-    for (const product of products) {
-      if (
-        product.categoryId &&
-        product.categoryName
-      ) {
-        map.set(
-          product.categoryId,
-          product.categoryName,
-        );
-      }
-    }
-
-    return Array.from(
-      map.entries(),
-    ).sort((a, b) =>
-      a[1].localeCompare(
-        b[1],
-        "fa",
-      ),
-    );
-  }, [products]);
+    void loadCategories();
+  }, [loadCategories]);
 
   /*
    * =========================================================
@@ -472,71 +721,102 @@ const loadProducts = useCallback(
   function clearPendingImages() {
     setPendingImages((current) => {
       for (const item of current) {
-        URL.revokeObjectURL(item.preview);
+        URL.revokeObjectURL(
+          item.preview,
+        );
       }
 
       return [];
     });
   }
 
-  function addPendingImages(
+  async function addPendingImages(
     files: File[],
   ) {
-    const validFiles: File[] = [];
-
-    for (const file of files) {
-      if (
-        !ALLOWED_IMAGE_TYPES.includes(
-          file.type,
-        )
-      ) {
-        setError(
-          `فرمت فایل «${file.name}» معتبر نیست. فقط JPG، JPEG، PNG یا WEBP مجاز است.`,
-        );
-        continue;
-      }
-
-      if (file.size <= 0) {
-        setError(
-          `فایل «${file.name}» خالی است.`,
-        );
-        continue;
-      }
-
-      if (
-        file.size > MAX_IMAGE_SIZE
-      ) {
-        setError(
-          `حجم فایل «${file.name}» بیشتر از ۵ مگابایت است.`,
-        );
-        continue;
-      }
-
-      validFiles.push(file);
-    }
-
-    if (validFiles.length === 0) {
+    if (files.length === 0) {
       return;
     }
 
+    setUploading(true);
     setError("");
+    setSuccessMessage("");
 
-    const newImages =
-      validFiles.map(
-        (file, index) => ({
-          id: `${Date.now()}-${index}-${Math.random()
-            .toString(36)
-            .slice(2)}`,
-          file,
-          preview:
-            URL.createObjectURL(file),
-        }),
-      );
+    try {
+      const convertedImages: PendingImage[] =
+        [];
 
-    setPendingImages((current) => [
-      ...current,
-      ...newImages,
-    ]);
+      for (
+        let index = 0;
+        index < files.length;
+        index += 1
+      ) {
+        const file = files[index];
+
+        if (!file) {
+          continue;
+        }
+
+        setSuccessMessage(
+          `در حال تبدیل تصویر ${toPersianDigits(
+            index + 1,
+          )} از ${toPersianDigits(
+            files.length,
+          )} به WebP...`,
+        );
+
+        try {
+          const webpFile =
+            await convertImageToWebP(
+              file,
+            );
+
+          const preview =
+            URL.createObjectURL(
+              webpFile,
+            );
+
+          convertedImages.push({
+            id: `${Date.now()}-${index}-${Math.random()
+              .toString(36)
+              .slice(2)}`,
+            file: webpFile,
+            preview,
+          });
+        } catch (err) {
+          console.error(
+            "IMAGE CONVERSION ERROR:",
+            err,
+          );
+
+          setError(
+            err instanceof Error
+              ? err.message
+              : `تبدیل تصویر «${file.name}» ناموفق بود.`,
+          );
+        }
+      }
+
+      if (
+        convertedImages.length > 0
+      ) {
+        setPendingImages(
+          (current) => [
+            ...current,
+            ...convertedImages,
+          ],
+        );
+
+        setSuccessMessage(
+          `${toPersianDigits(
+            convertedImages.length,
+          )} تصویر با موفقیت به WebP تبدیل شد و آماده آپلود است.`,
+        );
+      } else {
+        setSuccessMessage("");
+      }
+    } finally {
+      setUploading(false);
+    }
   }
 
   function removePendingImage(
@@ -576,9 +856,7 @@ const loadProducts = useCallback(
       ...EMPTY_FORM,
       categoryId:
         categories.length > 0
-          ? String(
-              categories[0]?.[0] ?? "",
-            )
+          ? String(categories[0]?.id ?? "")
           : "",
     });
 
@@ -688,13 +966,13 @@ const loadProducts = useCallback(
       event.target.files ?? [],
     );
 
+    event.target.value = "";
+
     if (files.length === 0) {
       return;
     }
 
-    addPendingImages(files);
-
-    event.target.value = "";
+    void addPendingImages(files);
   }
 
   /*
@@ -717,12 +995,10 @@ const loadProducts = useCallback(
     }
 
     if (
-      !ALLOWED_IMAGE_TYPES.includes(
-        file.type,
-      )
+      file.type !== "image/webp"
     ) {
       throw new Error(
-        `فرمت تصویر «${file.name}» باید JPG، JPEG، PNG یا WEBP باشد.`,
+        `تصویر «${file.name}» باید WebP باشد.`,
       );
     }
 
@@ -1591,33 +1867,27 @@ const loadProducts = useCallback(
         }
       }
 
-      /*
-       * Product Request
-       */
+/*
+ * Product Request
+ */
 
-      const requestBody =
-        isEditing
-          ? {
-              ...payload,
-              productId,
-            }
-          : payload;
-
-      const response = await fetch(
-        "/api/admin/products",
-        {
-          method: isEditing
-            ? "PATCH"
-            : "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify(
-            requestBody,
-          ),
-        },
-      );
+const response = await fetch(
+  isEditing
+    ? `/api/admin/products?productId=${encodeURIComponent(
+        String(productId),
+      )}`
+    : "/api/admin/products",
+  {
+    method: isEditing
+      ? "PATCH"
+      : "POST",
+    headers: {
+      "Content-Type":
+        "application/json",
+    },
+    body: JSON.stringify(payload),
+  },
+);
 
       let data: ProductApiResponse;
 
@@ -1644,46 +1914,50 @@ const loadProducts = useCallback(
        * دریافت Product ID
        */
 
-let savedProductId: number;
+      let savedProductId: number;
 
-if (isEditing) {
-  if (
-    productId === null ||
-    !Number.isInteger(productId) ||
-    productId <= 0
-  ) {
-    throw new Error(
-      "شناسه محصول معتبر نیست.",
-    );
-  }
+      if (isEditing) {
+        if (
+          productId === null ||
+          !Number.isInteger(productId) ||
+          productId <= 0
+        ) {
+          throw new Error(
+            "شناسه محصول معتبر نیست.",
+          );
+        }
 
-  savedProductId = productId;
-} else {
-  const createdProductId =
-    Number(data.product?.id);
+        savedProductId = productId;
+      } else {
+        const createdProductId =
+          Number(data.product?.id);
 
-  if (
-    !Number.isInteger(
-      createdProductId,
-    ) ||
-    createdProductId <= 0
-  ) {
-    throw new Error(
-      "محصول ذخیره شد اما شناسه محصول از سرور دریافت نشد.",
-    );
-  }
+        if (
+          !Number.isInteger(
+            createdProductId,
+          ) ||
+          createdProductId <= 0
+        ) {
+          throw new Error(
+            "محصول ذخیره شد اما شناسه محصول از سرور دریافت نشد.",
+          );
+        }
 
-  savedProductId =
-    createdProductId;
-}
+        savedProductId =
+          createdProductId;
+      }
 
-if (
-  pendingImages.length > 0
-) {
-  await uploadPendingImages(
-    savedProductId,
-  );
-}
+      /*
+       * Upload WebP Images
+       */
+
+      if (
+        pendingImages.length > 0
+      ) {
+        await uploadPendingImages(
+          savedProductId,
+        );
+      }
 
       /*
        * Reload
@@ -1737,108 +2011,102 @@ if (
    * =========================================================
    */
 
-  async function deleteProduct(
-    product: Product,
+async function deleteProduct(
+  product: Product,
+) {
+  const productId = Number(
+    product.id,
+  );
+
+  if (
+    !Number.isInteger(productId) ||
+    productId <= 0
   ) {
-    const productId = Number(
-      product.id,
+    setError(
+      "شناسه محصول معتبر نیست.",
     );
 
-    if (
-      !Number.isInteger(
-        productId,
-      ) ||
-      productId <= 0
-    ) {
-      setError(
-        "شناسه محصول معتبر نیست.",
-      );
+    return;
+  }
 
-      return;
-    }
+  const confirmed =
+    window.confirm(
+      `آیا از حذف «${product.name}» مطمئن هستید؟`,
+    );
 
-    const confirmed =
-      window.confirm(
-        `آیا از حذف «${product.name}» مطمئن هستید؟`,
-      );
+  if (!confirmed) {
+    return;
+  }
 
-    if (!confirmed) {
-      return;
-    }
+  try {
+    setDeletingId(productId);
+    setError("");
+    setSuccessMessage("");
+
+    const response = await fetch(
+  `/api/admin/products?productId=${encodeURIComponent(String(productId))}`,
+  {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  },
+)
+
+    let data: {
+      success: boolean;
+      message?: string;
+    };
 
     try {
-      setDeletingId(productId);
-      setError("");
-      setSuccessMessage("");
-
-      const response = await fetch(
-        "/api/admin/products",
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            productId,
-          }),
-        },
+      data =
+        (await response.json()) as {
+          success: boolean;
+          message?: string;
+        };
+    } catch {
+      throw new Error(
+        "پاسخ نامعتبر از سرور دریافت شد.",
       );
-
-      let data: {
-        success: boolean;
-        message?: string;
-      };
-
-      try {
-        data =
-          (await response.json()) as {
-            success: boolean;
-            message?: string;
-          };
-      } catch {
-        throw new Error(
-          "پاسخ نامعتبر از سرور دریافت شد.",
-        );
-      }
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        throw new Error(
-          data.message ??
-            "حذف محصول ناموفق بود.",
-        );
-      }
-
-      setProducts((current) =>
-        current.filter(
-          (item) =>
-            Number(item.id) !==
-            productId,
-        ),
-      );
-
-      setSuccessMessage(
-        "محصول با موفقیت حذف شد.",
-      );
-
-      window.setTimeout(() => {
-        setSuccessMessage("");
-      }, 3000);
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "حذف محصول ناموفق بود.",
-      );
-    } finally {
-      setDeletingId(null);
     }
+
+    if (
+      !response.ok ||
+      !data.success
+    ) {
+      throw new Error(
+        data.message ??
+          "حذف محصول ناموفق بود.",
+      );
+    }
+
+    setProducts((current) =>
+      current.filter(
+        (item) =>
+          Number(item.id) !==
+          productId,
+      ),
+    );
+
+    setSuccessMessage(
+      "محصول با موفقیت حذف شد.",
+    );
+
+    window.setTimeout(() => {
+      setSuccessMessage("");
+    }, 3000);
+  } catch (err) {
+    console.error(err);
+
+    setError(
+      err instanceof Error
+        ? err.message
+        : "حذف محصول ناموفق بود.",
+    );
+  } finally {
+    setDeletingId(null);
   }
+}
 
   /*
    * =========================================================
@@ -1852,8 +2120,6 @@ if (
       className="min-h-screen bg-neutral-950 px-4 py-8 text-white md:px-8"
     >
       <div className="mx-auto max-w-7xl">
-        {/* Header */}
-
         <div className="mb-8 flex flex-col gap-5 border-b border-white/10 pb-6 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-3">
@@ -1916,8 +2182,6 @@ if (
           </div>
         </div>
 
-        {/* Messages */}
-
         {successMessage && (
           <div className="mb-6 rounded-xl border border-green-500/20 bg-green-500/10 px-5 py-4 text-sm text-green-300">
             {successMessage}
@@ -1929,8 +2193,6 @@ if (
             {error}
           </div>
         )}
-
-        {/* Search */}
 
         <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
           <div className="flex items-center gap-3">
@@ -1949,8 +2211,6 @@ if (
           </div>
         </div>
 
-        {/* Loading */}
-
         {loading && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-12 text-center">
             <RefreshCw className="mx-auto mb-4 h-8 w-8 animate-spin text-neutral-500" />
@@ -1960,8 +2220,6 @@ if (
             </p>
           </div>
         )}
-
-        {/* Empty */}
 
         {!loading &&
           filteredProducts.length ===
@@ -1979,8 +2237,6 @@ if (
               </p>
             </div>
           )}
-
-        {/* Products */}
 
         {!loading &&
           filteredProducts.length >
@@ -2165,13 +2421,9 @@ if (
           )}
       </div>
 
-      {/* Modal */}
-
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
           <div className="my-8 w-full max-w-5xl rounded-2xl border border-white/10 bg-neutral-950 shadow-2xl">
-            {/* Modal Header */}
-
             <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
               <div>
                 <h2 className="text-xl font-bold">
@@ -2199,8 +2451,6 @@ if (
               </button>
             </div>
 
-            {/* Modal Body */}
-
             <div className="max-h-[75vh] overflow-y-auto p-6">
               {error && (
                 <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -2215,8 +2465,6 @@ if (
               )}
 
               <div className="grid gap-5 md:grid-cols-2">
-                {/* Name */}
-
                 <Field
                   label="نام محصول"
                   value={form.name}
@@ -2229,8 +2477,6 @@ if (
                   placeholder="مثلاً لنت ترمز جلو"
                   required
                 />
-
-                {/* Brand */}
 
                 <Field
                   label="برند"
@@ -2245,8 +2491,6 @@ if (
                   required
                 />
 
-                {/* Slug */}
-
                 <Field
                   label="Slug"
                   value={form.slug}
@@ -2258,8 +2502,6 @@ if (
                   }
                   placeholder="اگر خالی باشد از نام ساخته می‌شود"
                 />
-
-                {/* Category */}
 
                 <div>
                   <label className="mb-2 block text-sm text-neutral-400">
@@ -2282,28 +2524,26 @@ if (
                       انتخاب دسته‌بندی
                     </option>
 
-                    {categories.map(
-                      ([id, name]) => (
-                        <option
-                          key={id}
-                          value={id}
-                        >
-                          {name}
-                        </option>
-                      ),
-                    )}
+                    {categories.map((category) => (
+                      <option
+                        key={category.id}
+                        value={category.id}
+                      >
+                        {category.name}
+                      </option>
+                    ))}
                   </select>
 
-                  {categories.length ===
-                    0 && (
-                    <p className="mt-2 text-xs text-yellow-500">
-                      هیچ دسته‌بندی‌ای پیدا
-                      نشد.
+                  {categoriesLoading ? (
+                    <p className="mt-2 text-xs text-neutral-400">
+                      در حال دریافت دسته‌بندی‌ها...
                     </p>
-                  )}
+                  ) : categories.length === 0 ? (
+                    <p className="mt-2 text-xs text-yellow-500">
+                      دسته‌بندی‌ای دریافت نشد. ابتدا اتصال سرور و وجود دسته‌بندی‌ها را بررسی کنید.
+                    </p>
+                  ) : null}
                 </div>
-
-                {/* Price */}
 
                 <Field
                   label="قیمت"
@@ -2319,8 +2559,6 @@ if (
                   required
                 />
 
-                {/* Old Price */}
-
                 <Field
                   label="قیمت قبلی"
                   value={form.oldPrice}
@@ -2334,8 +2572,6 @@ if (
                   inputMode="numeric"
                 />
 
-                {/* Stock */}
-
                 <Field
                   label="موجودی"
                   value={form.stock}
@@ -2347,8 +2583,6 @@ if (
                   }
                   inputMode="numeric"
                 />
-
-                {/* Availability */}
 
                 <div>
                   <label className="mb-2 block text-sm text-neutral-400">
@@ -2401,8 +2635,6 @@ if (
                   </div>
 
                   <div className="rounded-2xl border border-white/10 bg-neutral-900 p-4">
-                    {/* Existing Images */}
-
                     {editingProduct !==
                       null &&
                       editingProduct.images.length >
@@ -2459,8 +2691,6 @@ if (
                                         : "border-white/10"
                                     } bg-neutral-950`}
                                   >
-                                    {/* Image */}
-
                                     <div className="relative aspect-square">
                                       {imageUrl ? (
                                         <img
@@ -2476,8 +2706,6 @@ if (
                                         </div>
                                       )}
 
-                                      {/* Order */}
-
                                       <div className="absolute left-2 top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-black/75 px-2 text-[10px] text-white backdrop-blur">
                                         {toPersianDigits(
                                           imageIndex +
@@ -2485,16 +2713,12 @@ if (
                                         )}
                                       </div>
 
-                                      {/* Primary Badge */}
-
                                       {isPrimary && (
                                         <div className="absolute right-2 top-2 rounded-full bg-white px-2 py-1 text-[10px] font-bold text-neutral-950">
                                           تصویر اصلی
                                         </div>
                                       )}
                                     </div>
-
-                                    {/* Controls */}
 
                                     <div className="border-t border-white/10 bg-black/40 p-2">
                                       <div className="mb-2 grid grid-cols-2 gap-2">
@@ -2515,7 +2739,6 @@ if (
                                             isLegacy
                                           }
                                           className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-[10px] text-neutral-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
-                                          title="انتقال به بالا"
                                         >
                                           <ArrowUp className="h-3.5 w-3.5" />
                                           بالا
@@ -2541,7 +2764,6 @@ if (
                                             isLegacy
                                           }
                                           className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-[10px] text-neutral-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
-                                          title="انتقال به پایین"
                                         >
                                           <ArrowDown className="h-3.5 w-3.5" />
                                           پایین
@@ -2588,11 +2810,6 @@ if (
                                             isLegacy
                                           }
                                           className="inline-flex items-center justify-center rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-30"
-                                          title={
-                                            isLegacy
-                                              ? "این تصویر قدیمی و قابل حذف مستقیم نیست"
-                                              : "حذف تصویر"
-                                          }
                                         >
                                           <Trash2 className="h-3.5 w-3.5" />
                                         </button>
@@ -2605,8 +2822,6 @@ if (
                           </div>
                         </div>
                       )}
-
-                    {/* Pending Images */}
 
                     {pendingImages.length >
                       0 && (
@@ -2647,7 +2862,7 @@ if (
                                 </div>
 
                                 <div className="absolute right-2 top-2 rounded-full bg-black/70 px-2 py-1 text-[10px] text-white backdrop-blur">
-                                  جدید
+                                  WebP
                                 </div>
 
                                 <button
@@ -2673,8 +2888,6 @@ if (
                       </div>
                     )}
 
-                    {/* Upload */}
-
                     <button
                       type="button"
                       onClick={() =>
@@ -2695,7 +2908,8 @@ if (
                           </span>
 
                           <span className="mt-2 text-xs text-neutral-600">
-                            لطفاً صبر کنید
+                            تصاویر قبل از آپلود به WebP
+                            تبدیل می‌شوند
                           </span>
                         </>
                       ) : (
@@ -2715,9 +2929,13 @@ if (
                           </span>
 
                           <span className="mt-1 text-xs text-neutral-600">
-                            JPG، JPEG، PNG یا
-                            WEBP — حداکثر ۵ مگابایت
-                            برای هر تصویر
+                            JPG، JPEG، PNG یا WEBP
+                            — تبدیل خودکار به WebP
+                          </span>
+
+                          <span className="mt-1 text-xs text-neutral-600">
+                            حداکثر ۵ مگابایت برای هر
+                            تصویر
                           </span>
                         </>
                       )}
@@ -2733,8 +2951,6 @@ if (
                       }
                       className="hidden"
                     />
-
-                    {/* Primary Image */}
 
                     <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.02] p-4">
                       <div className="mb-2 flex items-center justify-between">
@@ -2784,7 +3000,6 @@ if (
                                 uploading
                               }
                               className="shrink-0 rounded-lg border border-red-500/20 bg-red-500/5 p-2 text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-                              title="حذف تصویر اصلی"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -2803,8 +3018,6 @@ if (
                   </div>
                 </div>
 
-                {/* Badge */}
-
                 <Field
                   label="نشان محصول"
                   value={form.badge}
@@ -2816,8 +3029,6 @@ if (
                   }
                   placeholder="مثلاً پرفروش"
                 />
-
-                {/* Rating */}
 
                 <Field
                   label="امتیاز"
@@ -2831,8 +3042,6 @@ if (
                   inputMode="decimal"
                 />
 
-                {/* Reviews */}
-
                 <Field
                   label="تعداد نظرات"
                   value={form.reviews}
@@ -2844,8 +3053,6 @@ if (
                   }
                   inputMode="numeric"
                 />
-
-                {/* Popularity */}
 
                 <Field
                   label="محبوبیت"
@@ -2859,8 +3066,6 @@ if (
                   inputMode="numeric"
                 />
 
-                {/* Keywords */}
-
                 <Field
                   label="کلمات کلیدی"
                   value={form.keywords}
@@ -2872,8 +3077,6 @@ if (
                   }
                   placeholder="لنت, ترمز, لنت جلو"
                 />
-
-                {/* Description */}
 
                 <div className="md:col-span-2">
                   <label className="mb-2 block text-sm text-neutral-400">
@@ -2898,8 +3101,6 @@ if (
                 </div>
               </div>
             </div>
-
-            {/* Modal Footer */}
 
             <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
               <button
@@ -2945,12 +3146,6 @@ if (
     </main>
   );
 }
-
-/*
- * =========================================================
- * Field Component
- * =========================================================
- */
 
 function Field({
   label,

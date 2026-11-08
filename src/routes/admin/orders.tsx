@@ -188,7 +188,7 @@ function formatPrice(value: number) {
     new Intl.NumberFormat("en-US").format(
       value,
     ),
-  )} تومان`;
+  )} ریال`;
 }
 
 function formatDate(value: string) {
@@ -352,7 +352,14 @@ function AdminOrdersPage() {
             "دریافت سفارش‌ها ناموفق بود.",
         );
       }
-
+console.table(
+  (data.orders ?? []).map((order) => ({
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+  })),
+);
       setOrders(
         Array.isArray(data.orders)
           ? data.orders

@@ -1,3 +1,5 @@
+
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -10,53 +12,54 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { fetchCategories } from "@/lib/api";
 import { SectionHeading } from "./SectionHeading";
 
-const categories: {
-  title: string;
-  hint: string;
-  icon: LucideIcon;
-  number: string;
-}[] = [
-  {
-    title: "قطعات موتور",
+const categoryPresentation: Record<
+  string,
+  { hint: string; icon: LucideIcon }
+> = {
+  "قطعات موتور": {
     hint: "پیستون، سوپاپ، واشر",
     icon: Cog,
-    number: "01",
   },
-  {
-    title: "سیستم ترمز",
+  "سیستم ترمز": {
     hint: "لنت، دیسک، کالیپر",
     icon: Disc3,
-    number: "02",
   },
-  {
-    title: "سیستم برق",
+  "سیستم برق": {
     hint: "شمع، باتری، چراغ",
     icon: Zap,
-    number: "03",
   },
-  {
-    title: "زنجیر و انتقال قدرت",
+  "زنجیر و انتقال قدرت": {
     hint: "زنجیر، دنده، کلاچ",
     icon: Link2,
-    number: "04",
   },
-  {
-    title: "روغن و مواد مصرفی",
+  "روغن و مواد مصرفی": {
     hint: "روغن، فیلتر، گریس",
     icon: Droplets,
-    number: "05",
   },
-  {
-    title: "بدنه و لوازم جانبی",
+  "بدنه و لوازم جانبی": {
     hint: "آینه، دسته، بدنه",
     icon: ShieldCheck,
-    number: "06",
   },
-];
+};
+
+const fallbackPresentation = {
+  hint: "",
+  icon: Cog,
+};
 
 export function Categories() {
+  const {
+    data: categories = [],
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["categories"],
+    queryFn: fetchCategories,
+  });
+
   return (
     <section className="relative overflow-hidden border-b border-border">
       {/* دکور پس‌زمینه */}
@@ -77,55 +80,75 @@ export function Categories() {
 
         {/* لیست دسته‌بندی‌ها */}
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.map(
-            ({ title, hint, icon: Icon, number }) => (
-              <Link
-                key={title}
-                to="/shop"
-                search={{
-                  q: "",
-                  category: title,
-                }}
-                className="group relative overflow-hidden rounded-2xl border border-border bg-surface/70 p-5 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:bg-surface-elevated hover:shadow-[var(--shadow-panel)]"
-              >
-                {/* شماره */}
-                <span className="absolute left-4 top-4 font-mono text-[10px] font-bold tracking-[0.2em] text-muted-foreground/40 transition-colors duration-300 group-hover:text-primary/60">
-                  {number}
-                </span>
+          {isLoading ? (
+            <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
+              در حال دریافت دسته‌بندی‌ها...
+            </p>
+          ) : isError ? (
+            <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
+              دریافت دسته‌بندی‌ها ناموفق بود.
+            </p>
+          ) : (
+            categories.map((category, index) => {
+              const presentation =
+                categoryPresentation[category.name] ??
+                fallbackPresentation;
 
-                {/* نور Hover */}
-                <span className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-primary/[0.06] blur-2xl transition-all duration-500 group-hover:bg-primary/[0.12]" />
+              const Icon = presentation.icon;
+              const hint =
+                category.description?.trim() || presentation.hint;
 
-                <div className="relative flex items-center gap-4">
-                  {/* آیکون */}
-                  <span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-border bg-background/70 text-primary transition-all duration-300 group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:shadow-[0_0_30px_-12px_oklch(0.78_0.13_72/70%)]">
-                    <Icon
-                      className="h-6 w-6 transition-transform duration-300 group-hover:scale-110"
-                      strokeWidth={1.5}
-                    />
+              return (
+                <Link
+                  key={category.id}
+                  to="/shop"
+                  search={{
+                    q: "",
+                    category: category.name,
+                  }}
+                  className="group relative overflow-hidden rounded-2xl border border-border bg-surface/70 p-5 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:bg-surface-elevated hover:shadow-[var(--shadow-panel)]"
+                >
+                  {/* شماره */}
+                  <span className="absolute left-4 top-4 font-mono text-[10px] font-bold tracking-[0.2em] text-muted-foreground/40 transition-colors duration-300 group-hover:text-primary/60">
+                    {String(index + 1).padStart(2, "0")}
                   </span>
 
-                  {/* متن */}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-extrabold sm:text-base">
-                      {title}
+                  {/* نور Hover */}
+                  <span className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-primary/[0.06] blur-2xl transition-all duration-500 group-hover:bg-primary/[0.12]" />
+
+                  <div className="relative flex items-center gap-4">
+                    {/* آیکون */}
+                    <span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-border bg-background/70 text-primary transition-all duration-300 group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:shadow-[0_0_30px_-12px_oklch(0.78_0.13_72/70%)]">
+                      <Icon
+                        className="h-6 w-6 transition-transform duration-300 group-hover:scale-110"
+                        strokeWidth={1.5}
+                      />
                     </span>
 
-                    <span className="mt-1.5 block truncate text-xs leading-5 text-muted-foreground">
-                      {hint}
+                    {/* متن */}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-extrabold sm:text-base">
+                        {category.name}
+                      </span>
+
+                      {hint && (
+                        <span className="mt-1.5 block truncate text-xs leading-5 text-muted-foreground">
+                          {hint}
+                        </span>
+                      )}
                     </span>
-                  </span>
 
-                  {/* فلش */}
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-background/40 text-muted-foreground transition-all duration-300 group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
-                    <ArrowLeft className="h-4 w-4 transition-transform duration-300 group-hover:-translate-x-0.5" />
-                  </span>
-                </div>
+                    {/* فلش */}
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-background/40 text-muted-foreground transition-all duration-300 group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
+                      <ArrowLeft className="h-4 w-4 transition-transform duration-300 group-hover:-translate-x-0.5" />
+                    </span>
+                  </div>
 
-                {/* خط پایین کارت */}
-                <span className="absolute inset-x-5 bottom-0 h-px origin-right scale-x-0 bg-gradient-to-l from-primary/60 to-transparent transition-transform duration-500 group-hover:scale-x-100" />
-              </Link>
-            ),
+                  {/* خط پایین کارت */}
+                  <span className="absolute inset-x-5 bottom-0 h-px origin-right scale-x-0 bg-gradient-to-l from-primary/60 to-transparent transition-transform duration-500 group-hover:scale-x-100" />
+                </Link>
+              );
+            })
           )}
         </div>
 

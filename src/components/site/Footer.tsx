@@ -23,30 +23,11 @@ const quickLinks = [
   },
 ];
 
-const infoLinks = [
-  {
-    label: "درباره ما",
-    href: "#about",
-  },
-  {
-    label: "تماس با ما",
-    href: "#contact",
-  },
-  {
-    label: "روش ارسال",
-    href: "#shipping",
-  },
-  {
-    label: "قوانین و مقررات",
-    href: "#rules",
-  },
-];
-
 export function Footer() {
   return (
     <footer className="border-t border-border bg-background">
       <div className="container mx-auto px-4 py-12">
-        <div className="grid gap-10 md:grid-cols-3">
+        <div className="grid gap-10 md:grid-cols-4">
 
           {/* Brand */}
           <div id="about">
@@ -88,18 +69,28 @@ export function Footer() {
                 </Link>
               ))}
             </nav>
+          </div>
 
-            <div className="mt-6 flex flex-wrap gap-4">
-              {infoLinks.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </a>
-              ))}
-            </div>
+          {/* Enamad */}
+          <div className="flex flex-col items-start">
+            <h3 className="mb-4 text-sm font-semibold">
+              نماد اعتماد
+            </h3>
+
+            <a
+              referrerPolicy="origin"
+              target="_blank"
+              rel="noopener noreferrer"
+              href="https://trustseal.enamad.ir/?id=7856310&Code=ycwCmnT9kkPj1i8NySS8Rqcxghii4duY"
+              className="inline-block"
+            >
+              <img
+                referrerPolicy="origin"
+                src="https://trustseal.enamad.ir/logo.aspx?id=7856310&Code=ycwCmnT9kkPj1i8NySS8Rqcxghii4duY"
+                alt="نماد اعتماد الکترونیکی"
+                className="h-auto w-[100px] cursor-pointer"
+              />
+            </a>
           </div>
 
           {/* Contact */}
@@ -141,7 +132,7 @@ export function Footer() {
 
               {/* Working Hours */}
               <div className="text-sm text-muted-foreground">
-                ساعات کاری: ۱۰:۰۰ تا ۱۶:۰۰
+                ساعات کاری: ۹:۰۰ تا ۱۸:۰۰
               </div>
 
               {/* Instagram */}

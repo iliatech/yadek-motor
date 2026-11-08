@@ -65,7 +65,7 @@ export function WhyUs() {
 
       <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
         <SectionHeading
-          title="چرا یدک موتور؟"
+          title="چرا دیاموند؟"
           subtitle="تلاش کرده‌ایم خرید قطعات موتورسیکلت را ساده، مطمئن و شفاف کنیم."
         />
 

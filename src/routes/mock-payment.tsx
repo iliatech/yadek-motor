@@ -294,7 +294,7 @@ function MockPaymentPage() {
                   {result.order.total.toLocaleString(
                     "fa-IR",
                   )}{" "}
-                  تومان
+                  ریال
                 </span>
               </div>
 

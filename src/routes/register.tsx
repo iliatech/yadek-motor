@@ -1,5 +1,10 @@
-import { useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+﻿import { useState } from "react";
+
+import {
+  createFileRoute,
+  Link,
+} from "@tanstack/react-router";
+
 import {
   ArrowRight,
   Loader2,
@@ -12,18 +17,23 @@ import {
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 
-export const Route = createFileRoute("/register")({
+export const Route = createFileRoute(
+  "/register",
+)({
   head: () => ({
     meta: [
       {
-        title: "ساخت حساب کاربری | یدک موتور",
+        title:
+          "ساخت حساب کاربری | یدک موتور",
       },
       {
         name: "description",
-        content: "ساخت حساب کاربری در فروشگاه یدک موتور",
+        content:
+          "ساخت حساب کاربری در فروشگاه یدک موتور",
       },
     ],
   }),
+
   component: RegisterPage,
 });
 
@@ -36,26 +46,74 @@ type RegisterForm = {
   confirmPassword: string;
 };
 
-function normalizeDigits(value: string) {
-  return value.replace(/[۰-۹]/g, (digit) =>
-    String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)),
-  );
+type RegisterResponse = {
+  success?: boolean;
+  error?: string;
+};
+
+function normalizeDigits(
+  value: string,
+) {
+  return value
+    .replace(/[۰-۹]/g, (digit) =>
+      String(
+        "۰۱۲۳۴۵۶۷۸۹".indexOf(
+          digit,
+        ),
+      ),
+    )
+    .replace(/[٠-٩]/g, (digit) =>
+      String(
+        "٠١٢٣٤٥٦٧٨٩".indexOf(
+          digit,
+        ),
+      ),
+    );
 }
 
 function RegisterPage() {
-  const navigate = useNavigate();
+  /*
+   * مسیر بازگشت بعد از ثبت‌نام
+   */
 
-  const [form, setForm] = useState<RegisterForm>({
-    firstName: "",
-    lastName: "",
-    phone: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
+  const returnTo = (() => {
+    if (typeof window === "undefined") {
+      return "/profile";
+    }
 
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+    const value =
+      new URLSearchParams(
+        window.location.search,
+      ).get("returnTo");
+
+    if (
+      value &&
+      value.startsWith("/") &&
+      !value.startsWith("//")
+    ) {
+      return value;
+    }
+
+    return "/profile";
+  })();
+
+  const [form, setForm] =
+    useState<RegisterForm>({
+      firstName: "",
+      lastName: "",
+      phone: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+    });
+
+  const [error, setError] =
+    useState("");
+
+  const [
+    isSubmitting,
+    setIsSubmitting,
+  ] = useState(false);
 
   const updateField = (
     field: keyof RegisterForm,
@@ -82,90 +140,167 @@ function RegisterPage() {
 
     setError("");
 
-    const firstName = form.firstName.trim();
-    const lastName = form.lastName.trim();
-    const phone = normalizeDigits(form.phone.trim());
-    const email = form.email.trim();
-    const password = form.password;
-    const confirmPassword = form.confirmPassword;
+    const firstName =
+      form.firstName.trim();
+
+    const lastName =
+      form.lastName.trim();
+
+    const phone =
+      normalizeDigits(
+        form.phone.trim(),
+      );
+
+    const email =
+      form.email.trim();
+
+    const password =
+      form.password;
+
+    const confirmPassword =
+      form.confirmPassword;
 
     if (!firstName) {
-      setError("نام خود را وارد کنید.");
+      setError(
+        "نام خود را وارد کنید.",
+      );
+
       return;
     }
 
     if (!lastName) {
-      setError("نام خانوادگی خود را وارد کنید.");
+      setError(
+        "نام خانوادگی خود را وارد کنید.",
+      );
+
       return;
     }
 
     if (!phone) {
-      setError("شماره تماس خود را وارد کنید.");
+      setError(
+        "شماره تماس خود را وارد کنید.",
+      );
+
       return;
     }
 
-    if (!/^09\d{9}$/.test(phone)) {
-      setError("شماره تماس واردشده معتبر نیست.");
+    if (
+      !/^09\d{9}$/.test(phone)
+    ) {
+      setError(
+        "شماره تماس واردشده معتبر نیست.",
+      );
+
       return;
     }
 
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("ایمیل واردشده معتبر نیست.");
+    if (
+      email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        email,
+      )
+    ) {
+      setError(
+        "ایمیل واردشده معتبر نیست.",
+      );
+
       return;
     }
 
     if (!password) {
-      setError("رمز عبور خود را وارد کنید.");
+      setError(
+        "رمز عبور خود را وارد کنید.",
+      );
+
       return;
     }
 
     if (password.length < 6) {
-      setError("رمز عبور باید حداقل ۶ کاراکتر باشد.");
+      setError(
+        "رمز عبور باید حداقل ۶ کاراکتر باشد.",
+      );
+
       return;
     }
 
-    if (password !== confirmPassword) {
-      setError("تکرار رمز عبور با رمز عبور یکسان نیست.");
+    if (
+      password !==
+      confirmPassword
+    ) {
+      setError(
+        "تکرار رمز عبور با رمز عبور یکسان نیست.",
+      );
+
       return;
     }
 
     try {
       setIsSubmitting(true);
 
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          phone,
-          email,
-          password,
-        }),
-      });
+      const response =
+        await fetch(
+          "/api/auth/register",
+          {
+            method: "POST",
 
-      const data = await response.json().catch(() => null);
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            credentials: "include",
+
+            body: JSON.stringify({
+              firstName,
+              lastName,
+              phone,
+              email,
+              password,
+            }),
+          },
+        );
+
+      const data =
+        (await response
+          .json()
+          .catch(
+            () => null,
+          )) as
+          | RegisterResponse
+          | null;
 
       if (!response.ok) {
         throw new Error(
-          data?.error || "خطا در ایجاد حساب کاربری.",
+          data?.["error"] ||
+            "خطا در ایجاد حساب کاربری.",
         );
       }
 
-      if (!data?.success) {
+      if (!data?.["success"]) {
         throw new Error(
-          data?.error || "ثبت‌نام انجام نشد.",
+          data?.["error"] ||
+            "ثبت‌نام انجام نشد.",
         );
       }
 
-      await navigate({
-        to: "/profile",
-      });
+      /*
+       * بعد از ثبت‌نام موفق:
+       *
+       * اگر کاربر از Checkout آمده:
+       * /checkout
+       *
+       * در غیر این صورت:
+       * /profile
+       */
+
+      window.location.assign(
+        returnTo,
+      );
     } catch (error) {
-      console.error("Register error:", error);
+      console.error(
+        "Register error:",
+        error,
+      );
 
       setError(
         error instanceof Error
@@ -189,13 +324,14 @@ function RegisterPage() {
           <div className="hairline-grid absolute inset-0 opacity-30" />
 
           <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-            <Link
-              to="/login"
+            <a
+              href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
               className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowRight className="h-4 w-4" />
+
               بازگشت به ورود
-            </Link>
+            </a>
 
             <div className="mt-6">
               <h1 className="text-2xl font-extrabold tracking-tight sm:text-4xl">
@@ -212,7 +348,9 @@ function RegisterPage() {
         <section className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
           <div className="surface-panel rounded-xl p-6 sm:p-8">
             <form
-              onSubmit={handleSubmit}
+              onSubmit={
+                handleSubmit
+              }
               className="space-y-6"
             >
               {error && (
@@ -227,87 +365,144 @@ function RegisterPage() {
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   label="نام"
-                  icon={<User className="h-4 w-4" />}
-                  value={form.firstName}
+                  icon={
+                    <User className="h-4 w-4" />
+                  }
+                  value={
+                    form.firstName
+                  }
                   placeholder="مثلاً ایلیا"
                   autoComplete="given-name"
-                  onChange={(value) =>
-                    updateField("firstName", value)
+                  onChange={(
+                    value,
+                  ) =>
+                    updateField(
+                      "firstName",
+                      value,
+                    )
                   }
                 />
 
                 <FormField
                   label="نام خانوادگی"
-                  icon={<User className="h-4 w-4" />}
-                  value={form.lastName}
+                  icon={
+                    <User className="h-4 w-4" />
+                  }
+                  value={
+                    form.lastName
+                  }
                   placeholder="مثلاً سلیمی"
                   autoComplete="family-name"
-                  onChange={(value) =>
-                    updateField("lastName", value)
+                  onChange={(
+                    value,
+                  ) =>
+                    updateField(
+                      "lastName",
+                      value,
+                    )
                   }
                 />
 
                 <FormField
                   label="شماره تماس"
-                  icon={<Phone className="h-4 w-4" />}
-                  value={form.phone}
-                  placeholder="۰۹۱۲۱۲۳۴۵۶۷"
+                  icon={
+                    <Phone className="h-4 w-4" />
+                  }
+                  value={
+                    form.phone
+                  }
+                  placeholder="۰۹۱۲۳۴۵۶۷۸۹"
                   type="tel"
                   dir="ltr"
                   autoComplete="tel"
-                  onChange={(value) =>
-                    updateField("phone", value)
+                  onChange={(
+                    value,
+                  ) =>
+                    updateField(
+                      "phone",
+                      value,
+                    )
                   }
                 />
 
                 <FormField
                   label="ایمیل"
-                  icon={<Mail className="h-4 w-4" />}
-                  value={form.email}
+                  icon={
+                    <Mail className="h-4 w-4" />
+                  }
+                  value={
+                    form.email
+                  }
                   placeholder="example@email.com"
                   type="email"
                   dir="ltr"
                   autoComplete="email"
-                  onChange={(value) =>
-                    updateField("email", value)
+                  onChange={(
+                    value,
+                  ) =>
+                    updateField(
+                      "email",
+                      value,
+                    )
                   }
                 />
 
                 <FormField
                   label="رمز عبور"
-                  icon={<Lock className="h-4 w-4" />}
-                  value={form.password}
+                  icon={
+                    <Lock className="h-4 w-4" />
+                  }
+                  value={
+                    form.password
+                  }
                   placeholder="حداقل ۶ کاراکتر"
                   type="password"
                   dir="ltr"
                   autoComplete="new-password"
-                  onChange={(value) =>
-                    updateField("password", value)
+                  onChange={(
+                    value,
+                  ) =>
+                    updateField(
+                      "password",
+                      value,
+                    )
                   }
                 />
 
                 <FormField
                   label="تکرار رمز عبور"
-                  icon={<Lock className="h-4 w-4" />}
-                  value={form.confirmPassword}
+                  icon={
+                    <Lock className="h-4 w-4" />
+                  }
+                  value={
+                    form.confirmPassword
+                  }
                   placeholder="رمز عبور را دوباره وارد کنید"
                   type="password"
                   dir="ltr"
                   autoComplete="new-password"
-                  onChange={(value) =>
-                    updateField("confirmPassword", value)
+                  onChange={(
+                    value,
+                  ) =>
+                    updateField(
+                      "confirmPassword",
+                      value,
+                    )
                   }
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={
+                  isSubmitting
+                }
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3.5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
+
                     در حال ایجاد حساب...
                   </>
                 ) : (
@@ -317,12 +512,13 @@ function RegisterPage() {
 
               <div className="border-t border-border pt-5 text-center text-sm text-muted-foreground">
                 قبلاً حساب ساخته‌اید؟{" "}
-                <Link
-                  to="/login"
+
+                <a
+                  href={`/login?returnTo=${encodeURIComponent(returnTo)}`}
                   className="font-bold text-foreground transition-colors hover:text-primary"
                 >
                   وارد حساب شوید
-                </Link>
+                </a>
               </div>
             </form>
           </div>
@@ -348,7 +544,9 @@ function FormField({
   icon: React.ReactNode;
   value: string;
   placeholder?: string;
-  onChange: (value: string) => void;
+  onChange: (
+    value: string,
+  ) => void;
   type?: string;
   dir?: "ltr" | "rtl";
   autoComplete?: string;
@@ -357,17 +555,24 @@ function FormField({
     <label className="block">
       <span className="mb-2 flex items-center gap-2 text-sm font-bold">
         {icon}
+
         {label}
       </span>
 
       <input
         type={type}
         value={value}
-        placeholder={placeholder}
+        placeholder={
+          placeholder
+        }
         dir={dir}
-        autoComplete={autoComplete}
+        autoComplete={
+          autoComplete
+        }
         onChange={(event) =>
-          onChange(event.target.value)
+          onChange(
+            event.target.value,
+          )
         }
         className="w-full rounded-lg border border-border bg-surface px-4 py-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
       />

@@ -1,4 +1,5 @@
 import { mockPaymentProvider } from "./mock";
+import { zarinpalPaymentProvider } from "./zarinpal";
 import type {
   PaymentProvider,
   PaymentProviderName,
@@ -8,9 +9,9 @@ const providers: Partial<
   Record<PaymentProviderName, PaymentProvider>
 > = {
   mock: mockPaymentProvider,
+  zarinpal: zarinpalPaymentProvider,
 
   // درگاه‌های واقعی بعداً اضافه می‌شوند:
-  // zarinpal: zarinpalPaymentProvider,
   // idpay: idpayPaymentProvider,
   // zibal: zibalPaymentProvider,
 };
@@ -29,7 +30,7 @@ export function getPaymentProvider(
   return provider;
 }
 
-export { mockPaymentProvider };
+export { mockPaymentProvider, zarinpalPaymentProvider };
 
 export type {
   CreatePaymentParams,

@@ -1,0 +1,27 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "diamondmotor",
+	"compatibility_date": "2026-09-11",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"main": "@tanstack/react-start/server-entry",
+	"observability": {
+		"enabled": true
+	},
+	"d1_databases": [
+		{
+			"binding": "diamondmotor_db",
+			"database_name": "diamondmotor-db",
+			"database_id": "974afd52-266a-4c19-9f1c-216724d217c1",
+			"migrations_dir": "./drizzle"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "PRODUCT_IMAGES",
+			"id": "9dffc7892cd742cb93ba27b7f79b5bb0",
+			"remote": true
+		}
+	]
+}

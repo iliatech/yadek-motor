@@ -1102,7 +1102,7 @@ export async function createOrder({
      */
 
     status:
-      "pending_payment",
+      "pending",
 
     createdAt:
       new Date().toISOString(),

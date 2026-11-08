@@ -39,9 +39,14 @@ function getProductImageUrl(
   }
 
   /*
-   * مسیر public
+   * هر مسیر داخلی سایت
+   *
+   * شامل:
+   * /products/...
+   * /api/products/images/...
+   * و سایر مسیرهای داخلی
    */
-  if (value.startsWith("/products/")) {
+  if (value.startsWith("/")) {
     return value;
   }
 
@@ -128,8 +133,6 @@ export const Route = createFileRoute(
            * =================================================
            * دریافت تصاویر گالری
            * =================================================
-           *
-           * تصاویر از جدول product_images خوانده می‌شوند.
            */
 
           const imageRows = await db
@@ -145,40 +148,8 @@ export const Route = createFileRoute(
 
           /*
            * =================================================
-           * گروه‌بندی تصاویر بر اساس productId
-           * =================================================
-           */
-
-          const imagesByProduct =
-            new Map<number, string[]>();
-
-          for (const row of imageRows) {
-            const current =
-              imagesByProduct.get(
-                row.productId,
-              ) ?? [];
-
-            current.push(
-              getProductImageUrl(
-                row.image,
-              ),
-            );
-
-            imagesByProduct.set(
-              row.productId,
-              current,
-            );
-          }
-
-          /*
-           * =================================================
            * مرتب‌سازی تصاویر
            * =================================================
-           */
-
-          /*
-           * برای رعایت sortOrder، دوباره از رکوردهای خام
-           * استفاده می‌کنیم.
            */
 
           const sortedImageRows =
@@ -190,6 +161,12 @@ export const Route = createFileRoute(
                   b.sortOrder ||
                 a.id - b.id,
             );
+
+          /*
+           * =================================================
+           * گروه‌بندی تصاویر بر اساس productId
+           * =================================================
+           */
 
           const sortedImagesByProduct =
             new Map<number, string[]>();

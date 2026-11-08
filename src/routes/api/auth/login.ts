@@ -16,12 +16,16 @@ import {
  * =========================================================
  */
 
-function normalizeDigits(value: string) {
+function normalizeDigits(
+  value: string,
+) {
   return value.replace(
     /[۰-۹]/g,
     (digit) =>
       String(
-        "۰۱۲۳۴۵۶۷۸۹".indexOf(digit),
+        "۰۱۲۳۴۵۶۷۸۹".indexOf(
+          digit,
+        ),
       ),
   );
 }
@@ -110,7 +114,9 @@ export const Route = createFileRoute(
 )({
   server: {
     handlers: {
-      POST: async ({ request }) => {
+      POST: async ({
+        request,
+      }) => {
         try {
           /*
            * =================================================
@@ -119,20 +125,24 @@ export const Route = createFileRoute(
            */
 
           const body =
-            await request.json();
+            (await request.json()) as {
+              phone?: unknown;
+              password?: unknown;
+            };
 
           const phone =
-            typeof body.phone ===
+            typeof body["phone"] ===
             "string"
               ? normalizeDigits(
-                  body.phone.trim(),
+                  body["phone"].trim(),
                 )
               : "";
 
           const password =
-            typeof body.password ===
-            "string"
-              ? body.password
+            typeof body[
+              "password"
+            ] === "string"
+              ? body["password"]
               : "";
 
           /*

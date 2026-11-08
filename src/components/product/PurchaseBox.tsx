@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { useCart } from "@/hooks/useCart";
 
 import {
-  formatToman,
+  formatRial,
   getDiscountPercent,
   toPersianDigits,
   type Product,
@@ -76,10 +76,10 @@ export function PurchaseBox({
 
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <span className="text-2xl font-extrabold tracking-tight num sm:text-3xl">
-                {formatToman(product.price)}
+                {formatRial(product.price)}
 
                 <span className="mr-1 text-sm font-normal text-muted-foreground">
-                  تومان
+                  ریال
                 </span>
               </span>
 
@@ -97,7 +97,7 @@ export function PurchaseBox({
                 </span>
 
                 <span className="text-xs text-muted-foreground line-through num">
-                  {formatToman(product.oldPrice)} تومان
+                  {formatRial(product.oldPrice)} ریال
                 </span>
               </div>
             )}

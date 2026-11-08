@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ChevronLeft,
@@ -13,7 +13,6 @@ import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { SearchBar } from "@/components/shop/SearchBar";
 import { useQuery } from "@tanstack/react-query";
-import { fetchProducts } from "@/lib/api";
 import { CategoryFilter } from "@/components/shop/CategoryFilter";
 import {
   ProductFilters,
@@ -27,12 +26,15 @@ import {
 } from "@/components/shop/SortControl";
 
 import {
-  categories,
   normalizeFa,
   toPersianDigits,
-  type Category,
   type Product,
 } from "@/data/shop";
+
+import {
+  fetchCategories,
+  fetchProducts,
+} from "@/lib/api";
 
 const title = "فروشگاه | یدک موتور";
 
@@ -63,6 +65,13 @@ export const Route = createFileRoute("/shop")({
         content: description,
       },
     ],
+
+    links: [
+      {
+        rel: "canonical",
+        href: "https://diamondmotor.ir/shop",
+      },
+    ],
   }),
 
   component: ShopPage,
@@ -73,12 +82,9 @@ function ShopPage() {
 
   const [query, setQuery] = useState(search.q);
 
-  const [category, setCategory] = useState<Category>(
-    (categories as readonly string[]).includes(search.category)
-      ? (search.category as Category)
-      : "همه محصولات",
-  );
-
+const [category, setCategory] = useState<string>(
+  search.category || "همه محصولات",
+);
   const [filters, setFilters] =
     useState<Filters>(defaultFilters);
 
@@ -95,71 +101,95 @@ function ShopPage() {
   useEffect(() => {
     setQuery(search.q);
 
-    setCategory(
-      (categories as readonly string[]).includes(
-        search.category,
-      )
-        ? (search.category as Category)
-        : "همه محصولات",
-    );
+setCategory(search.category || "همه محصولات");
   }, [search.q, search.category]);
   const {
-  data: products = [],
-  isLoading,
-  isError,
+  data: categoryRows = [],
 } = useQuery({
-  queryKey: ["products"],
-  queryFn: fetchProducts,
+  queryKey: ["categories"],
+  queryFn: fetchCategories,
 });
-const normalizedProducts: Product[] = products.map(
-  (product) => ({
-    id: product.slug,
-    name: product.name,
-    brand: product.brand,
-    category: product.categoryName ?? "",
-    price: product.price,
 
-    ...(product.oldPrice !== null
-      ? { oldPrice: product.oldPrice }
-      : {}),
-
-    image: product.image,
-
-    availability:
-      product.availability as Product["availability"],
-
-    rating: product.rating,
-    reviews: product.reviews,
-    popularity: product.popularity,
-    createdAt: product.createdAt,
-    keywords: product.keywords ?? [],
-
-    ...(product.badge !== null
-      ? { badge: product.badge }
-      : {}),
-  }),
+const categoryNames = categoryRows.map(
+  (item) => item.name,
 );
-const availableBrands = [
-  ...new Set(
-    normalizedProducts.map(
-      (product) => product.brand,
+useEffect(() => {
+  if (!search.q.trim()) {
+    return;
+  }
+
+  const timer = window.setTimeout(() => {
+    document
+      .getElementById("products")
+      ?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+  }, 100);
+
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [search.q]);
+  const {
+    data: products = [],
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["products"],
+    queryFn: fetchProducts,
+  });
+
+  const normalizedProducts: Product[] = products.map(
+    (product) => ({
+      id: product.slug,
+      name: product.name,
+      brand: product.brand,
+      category: product.categoryName ?? "",
+      price: product.price,
+
+      ...(product.oldPrice !== null
+        ? { oldPrice: product.oldPrice }
+        : {}),
+
+      image: product.image,
+
+      availability:
+        product.availability as Product["availability"],
+
+      rating: product.rating,
+      reviews: product.reviews,
+      popularity: product.popularity,
+      createdAt: product.createdAt,
+      keywords: product.keywords ?? [],
+
+      ...(product.badge !== null
+        ? { badge: product.badge }
+        : {}),
+    }),
+  );
+
+  const availableBrands = [
+    ...new Set(
+      normalizedProducts.map(
+        (product) => product.brand,
+      ),
     ),
-  ),
-];
+  ];
 
-const prices = normalizedProducts.map(
-  (product) => product.price,
-);
+  const prices = normalizedProducts.map(
+    (product) => product.price,
+  );
 
-const minProductPrice =
-  prices.length > 0
-    ? Math.min(...prices)
-    : 0;
+  const minProductPrice =
+    prices.length > 0
+      ? Math.min(...prices)
+      : 0;
 
-const maxProductPrice =
-  prices.length > 0
-    ? Math.max(...prices)
-    : 0;
+  const maxProductPrice =
+    prices.length > 0
+      ? Math.max(...prices)
+      : 0;
 
   /*
    * فیلتر و مرتب‌سازی محصولات
@@ -167,78 +197,85 @@ const maxProductPrice =
   const results = useMemo(() => {
     const q = normalizeFa(query);
 
-    const filteredProducts = normalizedProducts.filter(
-      (product) => {
-        /*
-         * فیلتر دسته‌بندی
-         */
-        if (
-          category !== "همه محصولات" &&
-          product.category !== category
-        ) {
-          return false;
-        }
+    const filteredProducts =
+      normalizedProducts.filter(
+        (product) => {
+          /*
+           * فیلتر دسته‌بندی
+           */
+          if (
+            category !== "همه محصولات" &&
+            product.category !== category
+          ) {
+            return false;
+          }
 
-        /*
-         * فقط محصولات موجود
-         */
-        if (
-          filters.onlyAvailable &&
-          product.availability === "out-of-stock"
-        ) {
-          return false;
-        }
+          /*
+           * فقط محصولات موجود
+           */
+          if (
+            filters.onlyAvailable &&
+            product.availability ===
+              "out-of-stock"
+          ) {
+            return false;
+          }
 
-        /*
-         * فیلتر برند
-         */
-        if (
-          filters.brands.length > 0 &&
-          !filters.brands.includes(product.brand)
-        ) {
-          return false;
-        }
+          /*
+           * فیلتر برند
+           */
+          if (
+            filters.brands.length > 0 &&
+            !filters.brands.includes(
+              product.brand,
+            )
+          ) {
+            return false;
+          }
 
-        /*
-         * فیلتر قیمت
-         */
-        if (
-          filters.maxPrice !== Number.MAX_SAFE_INTEGER &&
-          product.price > filters.maxPrice
-        ) {
-          return false;
-        }
-        /*
-         * اگر جستجو خالی باشد
-         */
-        if (!q) {
-          return true;
-        }
+          /*
+           * فیلتر قیمت
+           */
+          if (
+            filters.maxPrice !==
+              Number.MAX_SAFE_INTEGER &&
+            product.price >
+              filters.maxPrice
+          ) {
+            return false;
+          }
 
-        /*
-         * اطلاعات قابل جستجو
-         */
-        const haystack = normalizeFa(
-          [
-            product.name,
-            product.brand,
-            product.category,
-            ...product.keywords,
-          ].join(" "),
-        );
+          /*
+           * اگر جستجو خالی باشد
+           */
+          if (!q) {
+            return true;
+          }
 
-        /*
-         * تمام کلمات جستجو باید
-         * در اطلاعات محصول وجود داشته باشند
-         */
-        return q
-          .split(" ")
-          .filter(Boolean)
-          .every((token) =>
-            haystack.includes(token),
+          /*
+           * اطلاعات قابل جستجو
+           */
+          const haystack = normalizeFa(
+            [
+              product.name,
+              product.brand,
+              product.category,
+              ...product.keywords,
+            ].join(" "),
           );
-      },
-    );
+
+          /*
+           * تمام کلمات جستجو باید
+           * در اطلاعات محصول وجود داشته باشند
+           */
+          return q
+            .split(" ")
+            .filter(Boolean)
+            .every((token) =>
+              haystack.includes(token),
+            );
+        },
+      );
 
     /*
      * مرتب‌سازی
@@ -278,13 +315,13 @@ const maxProductPrice =
     }
 
     return sorted;
-}, [
-  query,
-  category,
-  filters,
-  sort,
-  normalizedProducts,
-]);
+  }, [
+    query,
+    category,
+    filters,
+    sort,
+    normalizedProducts,
+  ]);
 
   /*
    * تعداد فیلترهای فعال
@@ -392,10 +429,11 @@ const maxProductPrice =
               </p>
             </div>
 
-            <CategoryFilter
-              value={category}
-              onChange={setCategory}
-            />
+<CategoryFilter
+  value={category}
+  onChange={setCategory}
+  categories={categoryNames}
+/>
           </section>
 
           {/* ================================
@@ -448,7 +486,10 @@ const maxProductPrice =
                 PRODUCTS
             ============================= */}
 
-            <section className="min-w-0">
+            <section
+  id="products"
+  className="min-w-0 scroll-mt-24"
+>
               {/* Toolbar */}
 
               <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">

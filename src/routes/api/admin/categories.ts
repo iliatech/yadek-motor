@@ -807,26 +807,33 @@ export const Route = createFileRoute(
             );
           }
 
-          const parsed =
-            await parseJsonBody(
-              request,
-            );
 
-          if (!parsed.success) {
-            return parsed.response;
-          }
+let bodyCategoryId: unknown;
 
-          const categoryId =
-            parseCategoryId(
-              parsed.body.categoryId,
-            );
+try {
+  const body = await request.json();
 
-          if (!categoryId) {
-            return jsonError(
-              "شناسه دسته‌بندی معتبر نیست.",
-              400,
-            );
-          }
+  if (body && typeof body === "object") {
+    bodyCategoryId = (
+      body as { categoryId?: unknown }
+    ).categoryId;
+  }
+} catch {
+  // ممکن است درخواست حذف بدنه نداشته باشد.
+}
+
+const categoryId = parseCategoryId(
+  new URL(request.url).searchParams.get("categoryId") ??
+    bodyCategoryId,
+);
+
+if (!categoryId) {
+  return jsonError(
+    "شناسه دسته‌بندی معتبر نیست.",
+    400,
+  );
+}
+
 
           /*
            * بررسی وجود دسته‌بندی

@@ -10,6 +10,24 @@ import {
   type Product,
 } from "@/data/shop";
 
+function normalizeProductImage(
+  image: string | null | undefined,
+) {
+  if (!image) {
+    return "/products/placeholder.webp";
+  }
+
+  if (
+    image.startsWith("/") ||
+    image.startsWith("http://") ||
+    image.startsWith("https://")
+  ) {
+    return image;
+  }
+
+  return `/products/${image}`;
+}
+
 export function RelatedProducts({
   product,
 }: {
@@ -35,9 +53,9 @@ export function RelatedProducts({
         category: apiProduct.categoryName ?? "",
         price: apiProduct.price,
 
-        image: apiProduct.image
-          ? `/products/${apiProduct.image}`
-          : "/products/placeholder.webp",
+        image: normalizeProductImage(
+          apiProduct.image,
+        ),
 
         availability: apiProduct.availability,
         rating: apiProduct.rating,

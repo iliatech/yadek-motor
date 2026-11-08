@@ -39,139 +39,178 @@ export function CartProvider({
   const [hydrated, setHydrated] = useState(false);
 
   /*
+   * --------------------------------------------------
    * خواندن سبد خرید از localStorage
+   * --------------------------------------------------
+   *
+   * ابتدا سبد ذخیره‌شده را مستقیماً restore می‌کنیم
+   * تا بعد از refresh / login / redirect سبد خالی نشود.
+   *
+   * سپس اطلاعات محصولات را از API تازه می‌کنیم.
    */
   useEffect(() => {
+    let cancelled = false;
+
     const loadCart = async () => {
+      let savedItems: CartItem[] = [];
+
       try {
         const savedCart =
-          window.localStorage.getItem(STORAGE_KEY);
+          window.localStorage.getItem(
+            STORAGE_KEY,
+          );
 
-        if (!savedCart) {
-          setHydrated(true);
-          return;
+        if (savedCart) {
+          const parsed: unknown =
+            JSON.parse(savedCart);
+
+          if (Array.isArray(parsed)) {
+            savedItems = parsed.filter(
+              (item): item is CartItem =>
+                typeof item === "object" &&
+                item !== null &&
+                "product" in item &&
+                "quantity" in item &&
+                typeof item.quantity ===
+                  "number" &&
+                item.quantity > 0,
+            );
+          }
         }
+      } catch {
+        savedItems = [];
+      }
 
-        const parsed: unknown =
-          JSON.parse(savedCart);
+      /*
+       * بسیار مهم:
+       * اول اطلاعات قبلی Cart را restore می‌کنیم.
+       */
+      if (!cancelled) {
+        setItems(savedItems);
+        setHydrated(true);
+      }
 
-        if (!Array.isArray(parsed)) {
-          setItems([]);
-          setHydrated(true);
+      /*
+       * اگر سبد خالی است، نیازی به دریافت محصولات
+       * فقط برای refresh کردن Cart نداریم.
+       */
+      if (savedItems.length === 0) {
+        return;
+      }
+
+      /*
+       * دریافت آخرین اطلاعات محصولات از API
+       */
+      try {
+        const latestProducts =
+          await fetchProducts();
+
+        if (cancelled) {
           return;
         }
 
         /*
-         * اطلاعات ذخیره‌شده قبلی
+         * تبدیل محصولات API به Product
          */
-        const savedItems =
-          parsed.filter(
-            (item): item is CartItem =>
-              typeof item === "object" &&
-              item !== null &&
-              "product" in item &&
-              "quantity" in item &&
-              typeof item.quantity === "number",
+        const normalizedProducts: Product[] =
+          latestProducts.map(
+            (apiProduct) => ({
+              id: String(apiProduct.id),
+
+              name: apiProduct.name,
+
+              brand: apiProduct.brand,
+
+              category:
+                apiProduct.categoryName ?? "",
+
+              price: apiProduct.price,
+
+              image: apiProduct.image
+                ? apiProduct.image.startsWith("/")
+                  ? apiProduct.image
+                  : `/products/${apiProduct.image}`
+                : "/products/placeholder.webp",
+
+              availability:
+                apiProduct.availability,
+
+              rating: apiProduct.rating,
+
+              reviews: apiProduct.reviews,
+
+              popularity:
+                apiProduct.popularity,
+
+              createdAt:
+                apiProduct.createdAt,
+
+              keywords:
+                apiProduct.keywords ?? [],
+
+              ...(apiProduct.oldPrice !==
+                null &&
+              apiProduct.oldPrice !==
+                undefined
+                ? {
+                    oldPrice:
+                      apiProduct.oldPrice,
+                  }
+                : {}),
+
+              ...(apiProduct.badge
+                ? {
+                    badge:
+                      apiProduct.badge,
+                  }
+                : {}),
+            }),
           );
 
         /*
-         * دریافت آخرین اطلاعات محصولات از API
+         * اطلاعات ذخیره‌شده را با اطلاعات جدید
+         * API هماهنگ می‌کنیم.
+         *
+         * اگر محصول در API پیدا نشد،
+         * فعلاً از Cart حذفش نمی‌کنیم.
+         * این باعث می‌شود یک خطای موقت API
+         * سبد کاربر را از بین نبرد.
          */
-        try {
-          const latestProducts =
-            await fetchProducts();
-
-          /*
-           * تبدیل محصولات API به Product
-           */
-          const normalizedProducts: Product[] =
-            latestProducts.map(
-              (apiProduct) => ({
-                id: String(apiProduct.id),
-                name: apiProduct.name,
-                brand: apiProduct.brand,
-                category:
-                  apiProduct.categoryName ?? "",
-                price: apiProduct.price,
-                image: apiProduct.image
-                  ? `/products/${apiProduct.image}`
-                  : "/products/placeholder.webp",
-                availability:
-                  apiProduct.availability,
-                rating: apiProduct.rating,
-                reviews: apiProduct.reviews,
-                popularity:
-                  apiProduct.popularity,
-                createdAt:
-                  apiProduct.createdAt,
-                keywords:
-                  apiProduct.keywords ?? [],
-
-                ...(apiProduct.oldPrice !==
-                  null &&
-                apiProduct.oldPrice !==
-                  undefined
-                  ? {
-                      oldPrice:
-                        apiProduct.oldPrice,
-                    }
-                  : {}),
-
-                ...(apiProduct.badge
-                  ? {
-                      badge:
-                        apiProduct.badge,
-                    }
-                  : {}),
-              }),
-            );
-
-          /*
-           * جایگزین کردن اطلاعات قدیمی
-           * با اطلاعات جدید API
-           */
-          const refreshedItems: CartItem[] =
-            savedItems
-              .map((savedItem) => {
-                const latestProduct =
-                  normalizedProducts.find(
-                    (product) =>
-                      product.id ===
-                      String(
-                        savedItem.product.id,
-                      ),
-                  );
-
-                /*
-                 * اگر محصول از دیتابیس حذف شده باشد،
-                 * دیگر در سبد باقی نمی‌ماند.
-                 */
-                if (!latestProduct) {
-                  return null;
-                }
-
-                return {
-                  product: latestProduct,
-                  quantity:
-                    Math.max(
-                      1,
-                      savedItem.quantity,
-                    ),
-                };
-              })
-              .filter(
-                (
-                  item,
-                ): item is CartItem =>
-                  item !== null,
+        const refreshedItems: CartItem[] =
+          savedItems.map((savedItem) => {
+            const latestProduct =
+              normalizedProducts.find(
+                (product) =>
+                  product.id ===
+                  String(
+                    savedItem.product.id,
+                  ),
               );
 
-          setItems(refreshedItems);
+            if (!latestProduct) {
+              return savedItem;
+            }
 
-          /*
-           * localStorage را هم با اطلاعات جدید
-           * به‌روزرسانی می‌کنیم.
-           */
+            return {
+              product: latestProduct,
+              quantity: Math.max(
+                1,
+                savedItem.quantity,
+              ),
+            };
+          });
+
+        if (cancelled) {
+          return;
+        }
+
+        setItems(refreshedItems);
+
+        /*
+         * localStorage را هم با اطلاعات جدید
+         * هماهنگ می‌کنیم.
+         */
+        try {
           window.localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify(
@@ -179,28 +218,35 @@ export function CartProvider({
             ),
           );
         } catch {
-          /*
-           * اگر API در دسترس نبود،
-           * از اطلاعات قبلی localStorage
-           * استفاده می‌کنیم.
-           */
-          setItems(savedItems);
+          // localStorage در دسترس نیست
         }
       } catch {
-        setItems([]);
-      } finally {
-        setHydrated(true);
+        /*
+         * اگر API در دسترس نبود،
+         * Cart قبلی را نگه می‌داریم.
+         */
+        if (!cancelled) {
+          setItems(savedItems);
+        }
       }
     };
 
     void loadCart();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /*
+   * --------------------------------------------------
    * ذخیره سبد خرید در localStorage
+   * --------------------------------------------------
    */
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated) {
+      return;
+    }
 
     try {
       window.localStorage.setItem(
@@ -213,13 +259,17 @@ export function CartProvider({
   }, [items, hydrated]);
 
   /*
+   * --------------------------------------------------
    * افزودن محصول به سبد
+   * --------------------------------------------------
    */
   const addToCart = (
     product: Product,
     quantity = 1,
   ) => {
-    if (quantity <= 0) return;
+    if (quantity <= 0) {
+      return;
+    }
 
     setItems((currentItems) => {
       const existingItem =
@@ -255,7 +305,9 @@ export function CartProvider({
   };
 
   /*
+   * --------------------------------------------------
    * تغییر تعداد محصول
+   * --------------------------------------------------
    */
   const updateQuantity = (
     productId: string,
@@ -286,7 +338,9 @@ export function CartProvider({
   };
 
   /*
+   * --------------------------------------------------
    * حذف محصول
+   * --------------------------------------------------
    */
   const removeFromCart = (
     productId: string,
@@ -301,14 +355,26 @@ export function CartProvider({
   };
 
   /*
+   * --------------------------------------------------
    * خالی کردن کامل سبد
+   * --------------------------------------------------
    */
-  const clearCart = () => {
-    setItems([]);
-  };
+const clearCart = () => {
+  setItems([]);
+
+  try {
+    window.localStorage.removeItem(
+      STORAGE_KEY,
+    );
+  } catch {
+    // localStorage در دسترس نیست
+  }
+};
 
   /*
+   * --------------------------------------------------
    * تعداد کل کالاها
+   * --------------------------------------------------
    */
   const cartCount = useMemo(
     () =>
@@ -321,7 +387,9 @@ export function CartProvider({
   );
 
   /*
+   * --------------------------------------------------
    * مبلغ کل سبد
+   * --------------------------------------------------
    */
   const subtotal = useMemo(
     () =>

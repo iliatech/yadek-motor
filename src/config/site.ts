@@ -1,5 +1,5 @@
 export const siteConfig = {
-  name: "یدک موتور دیاموند",
+  name:" لوازم یدکی دیاموند",
 
   phone: {
     mobile: "09125325119",

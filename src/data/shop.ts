@@ -411,7 +411,7 @@ export function toPersianDigits(
   );
 }
 
-export function formatToman(value: number) {
+export function formatRial(value: number) {
   return toPersianDigits(
     value.toLocaleString("en-US"),
   );

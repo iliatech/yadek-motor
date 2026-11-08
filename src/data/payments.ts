@@ -278,7 +278,7 @@ export async function createPayment(
     throw new Error("شناسه سفارش نامعتبر است.");
   }
 
-  const provider = input.provider ?? "mock";
+  const provider = input.provider ?? "zarinpal";
 
   if (!isPaymentProvider(provider)) {
     throw new Error("درگاه پرداخت نامعتبر است.");

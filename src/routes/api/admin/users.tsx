@@ -1083,55 +1083,37 @@ export const Route =
              * ---------------------------------------------
              */
 
-            await db.transaction(
-              async (tx) => {
-                /*
-                 * Delete Sessions
-                 */
+await db
+  .delete(sessions)
+  .where(
+    eq(
+      sessions.userId,
+      userId,
+    ),
+  );
 
-                await tx
-                  .delete(sessions)
-                  .where(
-                    eq(
-                      sessions.userId,
-                      userId,
-                    ),
-                  );
+await db
+  .update(orders)
+  .set({
+    accountId: null,
+    updatedAt:
+      new Date().toISOString(),
+  })
+  .where(
+    eq(
+      orders.accountId,
+      userId,
+    ),
+  );
 
-                /*
-                 * Preserve Orders
-                 */
-
-                await tx
-                  .update(orders)
-                  .set({
-                    accountId:
-                      null,
-
-                    updatedAt:
-                      new Date().toISOString(),
-                  })
-                  .where(
-                    eq(
-                      orders.accountId,
-                      userId,
-                    ),
-                  );
-
-                /*
-                 * Delete User
-                 */
-
-                await tx
-                  .delete(users)
-                  .where(
-                    eq(
-                      users.id,
-                      userId,
-                    ),
-                  );
-              },
-            );
+await db
+  .delete(users)
+  .where(
+    eq(
+      users.id,
+      userId,
+    ),
+  );
 
             /*
              * ---------------------------------------------

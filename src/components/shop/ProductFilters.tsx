@@ -1,4 +1,4 @@
-import { formatToman } from "@/data/shop";
+import { formatRial } from "@/data/shop";
 import { cn } from "@/lib/utils";
 
 export type Filters = {
@@ -73,9 +73,9 @@ export function ProductFilters({
         <p className="mt-3 text-xs text-muted-foreground">
           تا{" "}
           <span className="font-bold text-foreground num">
-            {formatToman(displayedMaxPrice)}
+            {formatRial(displayedMaxPrice)}
           </span>{" "}
-          تومان
+          ریال
         </p>
       </section>
 

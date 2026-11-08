@@ -1,5 +1,32 @@
 import type { Product } from "@/data/shop";
+export type ApiCategory = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+};
 
+export type CategoriesResponse = {
+  success: boolean;
+  categories: ApiCategory[];
+  count: number;
+};
+
+export async function fetchCategories(): Promise<ApiCategory[]> {
+  const response = await fetch("/api/categories");
+
+  if (!response.ok) {
+    throw new Error("خطا در دریافت دسته‌بندی‌ها");
+  }
+
+  const data: CategoriesResponse = await response.json();
+
+  if (!data.success || !Array.isArray(data.categories)) {
+    throw new Error("دریافت دسته‌بندی‌ها ناموفق بود");
+  }
+
+  return data.categories;
+}
 export type ApiProduct = Product & {
   categoryId: number;
   categoryName: string | null;

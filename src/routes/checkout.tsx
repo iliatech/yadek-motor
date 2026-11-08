@@ -7,13 +7,11 @@ import {
 import {
   createFileRoute,
   Link,
-  useNavigate,
 } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ArrowRight,
   Check,
-  CheckCircle2,
   MapPin,
   Truck,
 } from "lucide-react";
@@ -24,9 +22,7 @@ import {
   createOrder,
   type OrderCustomer,
 } from "@/data/orders";
-import {
-  createPayment,
-} from "@/data/payments";
+import { createPayment } from "@/data/payments";
 import {
   getAddresses,
   getDefaultAddress,
@@ -71,7 +67,9 @@ type FormErrors = {
   [K in keyof formData]?: string | undefined;
 };
 
-type ShippingMethod = "normal" | "fast";
+type ShippingMethod =
+  | "normal"
+  | "fast";
 
 type CheckoutStep = 1 | 2;
 
@@ -81,13 +79,23 @@ type CheckoutStep = 1 | 2;
  * --------------------------------------------------
  */
 
-function normalizeDigits(value: string) {
+function normalizeDigits(
+  value: string,
+) {
   return value
     .replace(/[۰-۹]/g, (digit) =>
-      String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)),
+      String(
+        "۰۱۲۳۴۵۶۷۸۹".indexOf(
+          digit,
+        ),
+      ),
     )
     .replace(/[٠-٩]/g, (digit) =>
-      String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)),
+      String(
+        "٠١٢٣٤٥٦٧٨٩".indexOf(
+          digit,
+        ),
+      ),
     );
 }
 
@@ -98,19 +106,29 @@ function normalizeDigits(value: string) {
  */
 
 function CheckoutPage() {
-  const navigate = useNavigate();
-
   const {
     items,
     cartCount,
     subtotal,
   } = useCart();
 
+  /*
+   * بررسی Session واقعی سرور
+   *
+   * localStorage فقط برای prefill اطلاعات است
+   * و مرجع احراز هویت محسوب نمی‌شود.
+   */
+
+  const [authChecking, setAuthChecking] =
+    useState(true);
+
   const [addresses, setAddresses] =
     useState<UserAddress[]>([]);
 
-  const [selectedAddressId, setSelectedAddressId] =
-    useState<string | null>(null);
+  const [
+    selectedAddressId,
+    setSelectedAddressId,
+  ] = useState<string | null>(null);
 
   const [formData, setformData] =
     useState<formData>({
@@ -138,11 +156,91 @@ function CheckoutPage() {
 
   /*
    * --------------------------------------------------
+   * بررسی احراز هویت
+   * --------------------------------------------------
+   */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkAuth = async () => {
+      try {
+        const response =
+          await fetch(
+            "/api/auth/me",
+            {
+              credentials: "include",
+              headers: {
+                Accept:
+                  "application/json",
+              },
+            },
+          );
+
+        type AuthMeResponse = {
+  authenticated?: boolean;
+  user?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string | null;
+    createdAt: string;
+  };
+};
+
+const data =
+  (await response
+    .json()
+    .catch(
+      () => null,
+    )) as AuthMeResponse | null;
+
+if (
+  !response.ok ||
+  !data?.["authenticated"] ||
+  !data?.["user"]
+) {
+          window.location.assign(
+            "/login?returnTo=%2Fcheckout",
+          );
+
+          return;
+        }
+
+        setAuthChecking(false);
+      } catch (error) {
+        console.error(
+          "Checkout auth check error:",
+          error,
+        );
+
+        if (!cancelled) {
+          window.location.assign(
+            "/login?returnTo=%2Fcheckout",
+          );
+        }
+      }
+    };
+
+    checkAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /*
+   * --------------------------------------------------
    * دریافت اطلاعات اولیه کاربر
    * --------------------------------------------------
    */
 
   useEffect(() => {
+    if (authChecking) {
+      return;
+    }
+
     try {
       const account = getAccount();
 
@@ -151,19 +249,13 @@ function CheckoutPage() {
           ...current,
 
           firstName:
-            current.firstName ||
-            account.firstName ||
-            "",
+            account.firstName || "",
 
           lastName:
-            current.lastName ||
-            account.lastName ||
-            "",
+            account.lastName || "",
 
           phone:
-            current.phone ||
-            account.phone ||
-            "",
+            account.phone || "",
         }));
       }
     } catch (error) {
@@ -195,7 +287,7 @@ function CheckoutPage() {
         error,
       );
     }
-  }, []);
+  }, [authChecking]);
 
   /*
    * --------------------------------------------------
@@ -228,7 +320,7 @@ function CheckoutPage() {
   ) =>
     `${toPersianDigits(
       price.toLocaleString("fa-IR"),
-    )} تومان`;
+    )} ریال`;
 
   /*
    * --------------------------------------------------
@@ -278,19 +370,24 @@ function CheckoutPage() {
   function selectAddress(
     address: UserAddress,
   ) {
+    const account = getAccount();
+
     setSelectedAddressId(address.id);
 
     setformData((current) => ({
       ...current,
 
       firstName:
-        address.firstName,
+        account?.firstName ??
+        current.firstName,
 
       lastName:
-        address.lastName,
+        account?.lastName ??
+        current.lastName,
 
       phone:
-        address.phone,
+        account?.phone ??
+        current.phone,
 
       province:
         address.province,
@@ -450,19 +547,6 @@ function CheckoutPage() {
    * --------------------------------------------------
    * ثبت سفارش + ایجاد پرداخت
    * --------------------------------------------------
-   *
-   * جریان:
-   *
-   * 1. ساخت سفارش
-   * 2. ساخت Payment
-   * 3. انتقال به درگاه
-   *
-   * نکته مهم:
-   * سبد خرید اینجا پاک نمی‌شود.
-   *
-   * سبد فقط بعد از تأیید موفق پرداخت
-   * باید پاک شود.
-   * --------------------------------------------------
    */
 
   const handleSubmit = async (
@@ -473,10 +557,6 @@ function CheckoutPage() {
     if (isSubmitting) {
       return;
     }
-
-    /*
-     * بررسی فرم
-     */
 
     if (!validateForm()) {
       setStep(1);
@@ -491,10 +571,6 @@ function CheckoutPage() {
 
       return;
     }
-
-    /*
-     * جلوگیری از ثبت سفارش خالی
-     */
 
     if (items.length === 0) {
       toast.error(
@@ -560,27 +636,35 @@ function CheckoutPage() {
        * --------------------------------------------
        * مرحله دوم: ایجاد Payment
        * --------------------------------------------
-       *
-       * درگاه پیش‌فرض فعلاً Mock است.
-       * بعداً می‌توانیم فقط provider را
-       * به Zarinpal / IDPay / Zibal تغییر دهیم.
        */
 
-if (
-  !Number.isInteger(order.databaseId) ||
-  order.databaseId <= 0
-) {
-  throw new Error(
-    "شناسه دیتابیس سفارش معتبر نیست.",
-  );
-}
-console.log("ORDER BEFORE PAYMENT:", order);
-console.log("DATABASE ORDER ID:", order.databaseId);
+      if (
+        !Number.isInteger(
+          order.databaseId,
+        ) ||
+        order.databaseId <= 0
+      ) {
+        throw new Error(
+          "شناسه دیتابیس سفارش معتبر نیست.",
+        );
+      }
 
-const payment = await createPayment({
-  orderId: order.databaseId,
-  provider: "mock",
-});
+      console.log(
+        "ORDER BEFORE PAYMENT:",
+        order,
+      );
+
+      console.log(
+        "DATABASE ORDER ID:",
+        order.databaseId,
+      );
+
+      const payment =
+        await createPayment({
+          orderId:
+            order.databaseId,
+          provider: "zarinpal",
+        });
 
       /*
        * --------------------------------------------
@@ -597,9 +681,7 @@ const payment = await createPayment({
       );
 
       /*
-       * سبد خرید را اینجا پاک نمی‌کنیم.
-       *
-       * چون هنوز پرداخت موفق نشده است.
+       * سبد خرید اینجا پاک نمی‌شود.
        */
 
       window.location.href =
@@ -624,6 +706,28 @@ const payment = await createPayment({
       setIsSubmitting(false);
     }
   };
+
+  /*
+   * --------------------------------------------------
+   * در حال بررسی حساب
+   * --------------------------------------------------
+   */
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+
+        <main className="mx-auto flex min-h-[50vh] max-w-7xl items-center justify-center px-4">
+          <div className="text-sm font-bold text-muted-foreground">
+            در حال بررسی حساب کاربری...
+          </div>
+        </main>
+
+        <Footer />
+      </div>
+    );
+  }
 
   /*
    * --------------------------------------------------
@@ -997,6 +1101,7 @@ function StepOne({
             <div className="sm:col-span-2">
               <label className="block text-sm font-bold">
                 آدرس کامل
+
                 <span className="mr-1 text-primary">
                   *
                 </span>

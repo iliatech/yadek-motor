@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import {
   createFileRoute,
   Link,
@@ -14,6 +14,7 @@ import {
 
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
+import { saveAccount } from "@/data/account";
 
 /*
  * =========================================================
@@ -67,6 +68,36 @@ type LoginResponse = {
 function LoginPage() {
   const navigate = useNavigate();
 
+  /*
+   * مسیر بازگشت بعد از ورود
+   *
+   * اگر کاربر از Checkout آمده باشد:
+   * /login?returnTo=/checkout
+   *
+   * بعد از ورود مستقیماً به Checkout برمی‌گردد.
+   */
+
+  const returnTo = (() => {
+    if (typeof window === "undefined") {
+      return "/profile";
+    }
+
+    const value =
+      new URLSearchParams(
+        window.location.search,
+      ).get("returnTo");
+
+    if (
+      value &&
+      value.startsWith("/") &&
+      !value.startsWith("//")
+    ) {
+      return value;
+    }
+
+    return "/profile";
+  })();
+
   const [phone, setPhone] =
     useState("");
 
@@ -100,6 +131,13 @@ function LoginPage() {
         .replace(/[۰-۹]/g, (digit) =>
           String(
             "۰۱۲۳۴۵۶۷۸۹".indexOf(
+              digit,
+            ),
+          ),
+        )
+        .replace(/[٠-٩]/g, (digit) =>
+          String(
+            "٠١٢٣٤٥٦٧٨٩".indexOf(
               digit,
             ),
           ),
@@ -167,16 +205,35 @@ function LoginPage() {
       }
 
       /*
-       * Session توسط سرور داخل Cookie
-       * قرار گرفته است.
-       *
-       * بنابراین چیزی در localStorage
-       * ذخیره نمی‌کنیم.
+       * =====================================================
+       * Sync Client Account
+       * =====================================================
        */
 
-      await navigate({
-        to: "/profile",
+      saveAccount({
+        id: data.user.id,
+        firstName: data.user.firstName,
+        lastName: data.user.lastName,
+        phone: data.user.phone,
+        email: data.user.email ?? "",
+        createdAt: data.user.createdAt,
       });
+
+      /*
+       * =====================================================
+       * Redirect
+       * =====================================================
+       *
+       * اگر از Checkout آمده‌ایم:
+       * /checkout
+       *
+       * در غیر این صورت:
+       * /profile
+       */
+
+      window.location.assign(
+        returnTo,
+      );
     } catch (err) {
       console.error(
         "Login error:",
@@ -244,10 +301,6 @@ function LoginPage() {
         <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
           <div className="mx-auto max-w-md">
             <div className="surface-panel rounded-2xl p-6 sm:p-8">
-              {/* =================================================
-                  Icon
-                 ================================================= */}
-
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-border bg-surface">
                 <User className="h-6 w-6 text-muted-foreground" />
               </div>
@@ -262,26 +315,16 @@ function LoginPage() {
                 </p>
               </div>
 
-              {/* =================================================
-                  Error
-                 ================================================= */}
-
               {error && (
                 <div className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm font-bold leading-6 text-destructive">
                   {error}
                 </div>
               )}
 
-              {/* =================================================
-                  Form
-                 ================================================= */}
-
               <form
                 onSubmit={handleSubmit}
                 className="mt-7 space-y-5"
               >
-                {/* Phone */}
-
                 <label className="block">
                   <span className="mb-2 block text-sm font-bold">
                     شماره تماس
@@ -300,15 +343,13 @@ function LoginPage() {
                           event.target.value,
                         )
                       }
-                      placeholder="۰۹۱۲۱۲۳۴۵۶۷"
+                      placeholder="۰۹۱۲۳۴۵۶۷۸۹"
                       dir="ltr"
                       disabled={loading}
                       className="w-full rounded-lg border border-border bg-surface py-3 pl-4 pr-11 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </div>
                 </label>
-
-                {/* Password */}
 
                 <label className="block">
                   <span className="mb-2 block text-sm font-bold">
@@ -335,8 +376,6 @@ function LoginPage() {
                   </div>
                 </label>
 
-                {/* Submit */}
-
                 <button
                   type="submit"
                   disabled={loading}
@@ -348,22 +387,18 @@ function LoginPage() {
                 </button>
               </form>
 
-              {/* =================================================
-                  Register
-                 ================================================= */}
-
               <div className="mt-7 border-t border-border pt-6 text-center">
                 <p className="text-sm text-muted-foreground">
                   حساب کاربری ندارید؟
                 </p>
 
-                <Link
-                  to="/register"
+                <a
+                  href={`/register?returnTo=${encodeURIComponent(returnTo)}`}
                   className="mt-2 inline-flex items-center gap-1 text-sm font-bold transition-colors hover:text-primary"
                 >
                   ساخت حساب جدید
                   <ArrowRight className="h-4 w-4" />
-                </Link>
+                </a>
               </div>
             </div>
           </div>

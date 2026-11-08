@@ -8,12 +8,12 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { categories, type Category } from "@/data/shop";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  value: Category;
-  onChange: (value: Category) => void;
+  value: string;
+  onChange: (value: string) => void;
+  categories: string[];
 };
 
 const categoryIcons: Record<string, LucideIcon> = {
@@ -26,22 +26,29 @@ const categoryIcons: Record<string, LucideIcon> = {
   "بدنه و لوازم جانبی": ShieldCheck,
 };
 
-export function CategoryFilter({ value, onChange }: Props) {
+export function CategoryFilter({
+  value,
+  onChange,
+  categories,
+}: Props) {
+  const allCategories = [
+    "همه محصولات",
+    ...categories.filter(
+      (name) => name !== "همه محصولات",
+    ),
+  ];
+
   return (
     <section aria-label="دسته‌بندی محصولات">
-      <div className="mb-4 flex items-end justify-between gap-4">
-        <div>
-
-
-          <p className="mt-1 text-xs text-muted-foreground">
-            دسته مورد نظر خود را انتخاب کنید
-          </p>
-        </div>
+      <div className="mb-4">
+        <p className="mt-1 text-xs text-muted-foreground">
+          دسته مورد نظر خود را انتخاب کنید
+        </p>
       </div>
 
       <div className="-mx-4 overflow-x-auto px-4 pb-2 scrollbar-none sm:mx-0 sm:overflow-visible sm:px-0">
         <div className="flex min-w-max gap-2.5 sm:min-w-0 sm:flex-wrap">
-          {categories.map((category) => {
+          {allCategories.map((category) => {
             const active = category === value;
             const Icon = categoryIcons[category] ?? Cog;
 

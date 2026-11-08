@@ -25,6 +25,8 @@ import {
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 
+import { useCart } from "@/hooks/useCart";
+
 import {
   toPersianDigits,
 } from "@/data/shop";
@@ -42,7 +44,7 @@ export const Route = createFileRoute(
     meta: [
       {
         title:
-          "سفارش‌های من | یدک موتور",
+          "سفارش‌های من | لوازم یدکی دیاموند",
       },
 
       {
@@ -64,6 +66,8 @@ export const Route = createFileRoute(
  */
 
 function OrdersPage() {
+  const { clearCart } = useCart();
+
   const [orders, setOrders] =
     useState<Order[]>([]);
 
@@ -78,6 +82,26 @@ function OrdersPage() {
 
   /*
    * =======================================================
+   * خالی کردن سبد بعد از پرداخت موفق
+   * =======================================================
+   */
+
+  useEffect(() => {
+    const params =
+      new URLSearchParams(
+        window.location.search,
+      );
+
+    if (
+      params.get("payment") ===
+      "success"
+    ) {
+      clearCart();
+    }
+  }, [clearCart]);
+
+  /*
+   * =======================================================
    * دریافت سفارش‌ها
    * =======================================================
    */
@@ -88,26 +112,8 @@ function OrdersPage() {
     setError(null);
 
     try {
-      /*
-       * getOrders خودش:
-       *
-       * - Session را بررسی می‌کند
-       * - API را صدا می‌زند
-       * - پاسخ Backend را به Order تبدیل می‌کند
-       */
-
       const loadedOrders =
         await getOrders();
-
-      /*
-       * نکته:
-       *
-       * getOrders در صورت 401
-       * آرایه خالی برمی‌گرداند.
-       *
-       * برای تشخیص قطعی Login،
-       * Session را جداگانه بررسی می‌کنیم.
-       */
 
       const authResponse =
         await fetch(
@@ -429,7 +435,6 @@ function OrdersError({
   onRetry,
 }: {
   message: string;
-
   onRetry: () => void;
 }) {
   return (
@@ -497,7 +502,7 @@ function OrderCard({
       Number(price).toLocaleString(
         "fa-IR",
       ),
-    )} تومان`;
+    )} ریال`;
 
   /*
    * =======================================================
@@ -522,6 +527,8 @@ function OrderCard({
     return parsedDate.toLocaleDateString(
       "fa-IR",
       {
+        timeZone:
+          "Asia/Tehran",
         year: "numeric",
         month: "long",
         day: "numeric",
@@ -644,8 +651,6 @@ function OrderCard({
                   key={`${order.id}-${item.product.id}-${index}`}
                   className="flex items-center gap-3 rounded-lg border border-border bg-surface p-3"
                 >
-                  {/* تصویر */}
-
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-background">
                     <img
                       src={
@@ -667,8 +672,6 @@ function OrderCard({
                     />
                   </div>
 
-                  {/* نام و تعداد */}
-
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold">
                       {
@@ -688,8 +691,6 @@ function OrderCard({
                       </span>
                     </p>
                   </div>
-
-                  {/* مبلغ */}
 
                   <div className="text-left">
                     <p className="text-xs text-muted-foreground">
@@ -827,9 +828,7 @@ function OrderInfo({
   bold = false,
 }: {
   label: string;
-
   value: string;
-
   bold?: boolean;
 }) {
   return (

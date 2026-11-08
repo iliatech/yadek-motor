@@ -1,9 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import sharp from "sharp";
-import { eq, max } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
 
 import { db } from "@/db";
 import {
@@ -12,127 +9,149 @@ import {
 } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
 
-/*
- * =========================================================
- * Configuration
- * =========================================================
- */
+const MAX_IMAGE_SIZE =
+  5 * 1024 * 1024;
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_IMAGE_TYPE =
+  "image/webp";
 
-const ALLOWED_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
+type AdminAuthResult =
+  | {
+      authenticated: false;
+      authorized: false;
+    }
+  | {
+      authenticated: true;
+      authorized: false;
+    }
+  | {
+      authenticated: true;
+      authorized: true;
+    };
 
-/*
- * =========================================================
- * Helpers
- * =========================================================
- */
+async function requireAdminResponse(
+  request: Request,
+) {
+  const auth =
+    (await requireAdmin(
+      request,
+    )) as AdminAuthResult;
 
-/**
- * تبدیل اعداد فارسی به انگلیسی
- */
-function normalizeDigits(value: string): string {
-  return value.replace(
-    /[۰-۹]/g,
-    (digit: string) =>
-      String(
-        "۰۱۲۳۴۵۶۷۸۹".indexOf(digit),
+  if (!auth.authenticated) {
+    return {
+      ok: false as const,
+      response: Response.json(
+        {
+          success: false,
+          error:
+            "احراز هویت لازم است.",
+        },
+        {
+          status: 401,
+        },
       ),
-  );
+    };
+  }
+
+  if (!auth.authorized) {
+    return {
+      ok: false as const,
+      response: Response.json(
+        {
+          success: false,
+          error:
+            "دسترسی به این بخش مجاز نیست.",
+        },
+        {
+          status: 403,
+        },
+      ),
+    };
+  }
+
+  return {
+    ok: true as const,
+    auth,
+  };
 }
 
-/**
- * تبدیل مقدار به عدد صحیح مثبت
- */
-function toPositiveInteger(
-  value: unknown,
-): number | null {
+function parseProductId(
+  value: FormDataEntryValue | null,
+) {
   if (
-    typeof value === "number" &&
-    Number.isInteger(value) &&
-    value > 0
+    typeof value !== "string"
   ) {
-    return value;
+    return NaN;
   }
 
-  if (typeof value === "string") {
-    const normalized =
-      normalizeDigits(value.trim());
+  const normalized =
+    value
+      .trim()
+      .replace(
+        /[۰-۹]/g,
+        (digit) =>
+          String(
+            "۰۱۲۳۴۵۶۷۸۹".indexOf(
+              digit,
+            ),
+          ),
+      )
+      .replace(
+        /[٠-٩]/g,
+        (digit) =>
+          String(
+            "٠١٢٣٤٥٦٧٨٩".indexOf(
+              digit,
+            ),
+          ),
+      );
 
-    if (!normalized) {
-      return null;
-    }
-
-    const number =
-      Number(normalized);
-
-    if (
-      Number.isInteger(number) &&
-      number > 0
-    ) {
-      return number;
-    }
+  if (!/^\d+$/.test(normalized)) {
+    return NaN;
   }
 
-  return null;
+  const id = Number(
+    normalized,
+  );
+
+  if (
+    !Number.isSafeInteger(id) ||
+    id <= 0
+  ) {
+    return NaN;
+  }
+
+  return id;
 }
-
-/*
- * =========================================================
- * Route
- * =========================================================
- */
 
 export const Route = createFileRoute(
   "/api/admin/uploads/products",
 )({
   server: {
     handlers: {
-      POST: async ({ request }) => {
+      POST: async ({
+        request,
+      }) => {
         /*
-         * =================================================
-         * Authentication
-         * =================================================
+         * =====================================================
+         * Admin Authentication
+         * =====================================================
          */
 
         const admin =
-          await requireAdmin(request);
-
-        if (!admin.authenticated) {
-          return Response.json(
-            {
-              success: false,
-              message:
-                "برای دسترسی به این بخش باید وارد حساب شوید.",
-            },
-            {
-              status: 401,
-            },
+          await requireAdminResponse(
+            request,
           );
-        }
 
-        if (!admin.authorized) {
-          return Response.json(
-            {
-              success: false,
-              message:
-                "شما دسترسی مدیریت ندارید.",
-            },
-            {
-              status: 403,
-            },
-          );
+        if (!admin.ok) {
+          return admin.response;
         }
 
         try {
           /*
-           * =================================================
-           * بررسی Content-Type
-           * =================================================
+           * ===================================================
+           * Content Type
+           * ===================================================
            */
 
           const contentType =
@@ -143,7 +162,7 @@ export const Route = createFileRoute(
           if (
             !contentType
               .toLowerCase()
-              .includes(
+              .startsWith(
                 "multipart/form-data",
               )
           ) {
@@ -151,7 +170,7 @@ export const Route = createFileRoute(
               {
                 success: false,
                 message:
-                  "فایل باید به صورت multipart/form-data ارسال شود.",
+                  "فرمت درخواست آپلود معتبر نیست.",
               },
               {
                 status: 400,
@@ -160,43 +179,36 @@ export const Route = createFileRoute(
           }
 
           /*
-           * =================================================
-           * دریافت FormData
-           * =================================================
+           * ===================================================
+           * FormData
+           * ===================================================
            */
 
-          let formData: FormData;
-
-          try {
-            formData =
-              await request.formData();
-          } catch {
-            return Response.json(
-              {
-                success: false,
-                message:
-                  "اطلاعات فایل معتبر نیست.",
-              },
-              {
-                status: 400,
-              },
-            );
-          }
-
-          /*
-           * =================================================
-           * دریافت Product ID
-           * =================================================
-           */
+          const formData =
+            await request.formData();
 
           const productId =
-            toPositiveInteger(
+            parseProductId(
               formData.get(
                 "productId",
               ),
             );
 
-          if (!productId) {
+          const file =
+            formData.get("file");
+
+          /*
+           * ===================================================
+           * Validate Product ID
+           * ===================================================
+           */
+
+          if (
+            !Number.isInteger(
+              productId,
+            ) ||
+            productId <= 0
+          ) {
             return Response.json(
               {
                 success: false,
@@ -210,94 +222,27 @@ export const Route = createFileRoute(
           }
 
           /*
-           * =================================================
-           * بررسی وجود محصول
-           * =================================================
+           * ===================================================
+           * Validate File
+           * ===================================================
            */
-
-          const existingProduct =
-            await db
-              .select({
-                id: products.id,
-                image: products.image,
-              })
-              .from(products)
-              .where(
-                eq(
-                  products.id,
-                  productId,
-                ),
-              )
-              .limit(1);
-
-          const product =
-            existingProduct[0];
-
-          if (!product) {
-            return Response.json(
-              {
-                success: false,
-                message:
-                  "محصول پیدا نشد.",
-              },
-              {
-                status: 404,
-              },
-            );
-          }
-
-          /*
-           * =================================================
-           * دریافت فایل
-           * =================================================
-           */
-
-          const file =
-            formData.get("file");
 
           if (!(file instanceof File)) {
             return Response.json(
               {
                 success: false,
                 message:
-                  "لطفاً یک تصویر انتخاب کنید.",
+                  "فایل تصویر ارسال نشده است.",
               },
               {
                 status: 400,
               },
             );
           }
-
-          /*
-           * =================================================
-           * بررسی MIME Type
-           * =================================================
-           */
 
           if (
-            !ALLOWED_MIME_TYPES.has(
-              file.type,
-            )
+            file.size <= 0
           ) {
-            return Response.json(
-              {
-                success: false,
-                message:
-                  "فرمت تصویر باید JPG، JPEG، PNG یا WEBP باشد.",
-              },
-              {
-                status: 400,
-              },
-            );
-          }
-
-          /*
-           * =================================================
-           * بررسی حجم
-           * =================================================
-           */
-
-          if (file.size <= 0) {
             return Response.json(
               {
                 success: false,
@@ -312,7 +257,7 @@ export const Route = createFileRoute(
 
           if (
             file.size >
-            MAX_FILE_SIZE
+            MAX_IMAGE_SIZE
           ) {
             return Response.json(
               {
@@ -321,70 +266,26 @@ export const Route = createFileRoute(
                   "حجم تصویر نباید بیشتر از ۵ مگابایت باشد.",
               },
               {
-                status: 400,
+                status: 413,
               },
             );
           }
 
           /*
-           * =================================================
-           * تبدیل File به Buffer
-           * =================================================
+           * ===================================================
+           * فقط WebP
+           * ===================================================
            */
-
-          const inputBuffer =
-            Buffer.from(
-              await file.arrayBuffer(),
-            );
-
-          /*
-           * =================================================
-           * بررسی واقعی بودن تصویر
-           * =================================================
-           */
-
-          let metadata;
-
-          try {
-            metadata =
-              await sharp(
-                inputBuffer,
-              ).metadata();
-          } catch {
-            return Response.json(
-              {
-                success: false,
-                message:
-                  "فایل تصویر معتبر نیست.",
-              },
-              {
-                status: 400,
-              },
-            );
-          }
-
-          /*
-           * =================================================
-           * بررسی فرمت واقعی
-           * =================================================
-           */
-
-          const actualFormat =
-            metadata.format;
 
           if (
-            actualFormat !==
-              "jpeg" &&
-            actualFormat !==
-              "png" &&
-            actualFormat !==
-              "webp"
+            file.type !==
+            ALLOWED_IMAGE_TYPE
           ) {
             return Response.json(
               {
                 success: false,
                 message:
-                  "فرمت واقعی تصویر باید JPG، JPEG یا WEBP باشد.",
+                  "فایل تصویر باید WebP باشد.",
               },
               {
                 status: 400,
@@ -393,196 +294,262 @@ export const Route = createFileRoute(
           }
 
           /*
-           * =================================================
-           * تبدیل به WEBP
-           * =================================================
+           * ===================================================
+           * Check Product
+           * ===================================================
            */
 
-          let outputBuffer: Buffer;
-
-          try {
-            outputBuffer =
-              await sharp(
-                inputBuffer,
+          const productRows =
+            await db
+              .select({
+                id: products.id,
+                image:
+                  products.image,
+              })
+              .from(products)
+              .where(
+                eq(
+                  products.id,
+                  productId,
+                ),
               )
-                .rotate()
-                .webp({
-                  quality: 85,
-                  effort: 4,
-                })
-                .toBuffer();
-          } catch (error) {
-            console.error(
-              "Image conversion error:",
-              error,
-            );
+              .limit(1);
 
+          const product =
+            productRows[0];
+
+          if (!product) {
             return Response.json(
               {
                 success: false,
                 message:
-                  "تبدیل تصویر به WEBP انجام نشد.",
+                  "محصول موردنظر پیدا نشد.",
               },
               {
-                status: 500,
+                status: 404,
               },
             );
           }
 
           /*
-           * =================================================
-           * مسیر ذخیره تصاویر
-           * =================================================
+           * ===================================================
+           * Find Next Sort Order
+           * ===================================================
            */
 
-          const productsDirectory =
-            path.join(
-              process.cwd(),
-              "public",
-              "products",
-            );
-
-          await mkdir(
-            productsDirectory,
-            {
-              recursive: true,
-            },
-          );
-
-          /*
-           * =================================================
-           * نام فایل یکتا
-           * =================================================
-           */
-
-          const fileName =
-            `product-${randomUUID()}.webp`;
-
-          const filePath =
-            path.join(
-              productsDirectory,
-              fileName,
-            );
-
-          /*
-           * =================================================
-           * ذخیره فایل
-           * =================================================
-           */
-
-          await writeFile(
-            filePath,
-            outputBuffer,
-          );
-
-          /*
-           * =================================================
-           * URL تصویر
-           * =================================================
-           */
-
-          const imageUrl =
-            `/products/${fileName}`;
-
-          /*
-           * =================================================
-           * تعیین sortOrder
-           * =================================================
-           *
-           * تصویر جدید بعد از آخرین تصویر قرار می‌گیرد.
-           */
-
-          const currentMax =
+          const lastImageRows =
             await db
               .select({
-                maxSortOrder:
-                  max(
-                    productImages.sortOrder,
-                  ),
+                sortOrder:
+                  productImages.sortOrder,
               })
-              .from(
-                productImages,
-              )
+              .from(productImages)
               .where(
                 eq(
                   productImages.productId,
                   productId,
                 ),
-              );
+              )
+              .orderBy(
+                desc(
+                  productImages.sortOrder,
+                ),
+              )
+              .limit(1);
 
-          const maxSortOrder =
-            currentMax[0]
-              ?.maxSortOrder ?? -1;
+          const lastImage =
+            lastImageRows[0];
 
           const sortOrder =
-            maxSortOrder + 1;
+            lastImage
+              ? Number(
+                  lastImage.sortOrder,
+                ) + 1
+              : 0;
 
           /*
-           * =================================================
-           * ثبت تصویر در product_images
-           * =================================================
+           * ===================================================
+           * Insert Metadata First
+           *
+           * image بعد از ساخت ID ساخته می‌شود.
+           * ===================================================
            */
 
-          const inserted =
+          const now =
+            new Date().toISOString();
+
+          const insertedRows =
             await db
-              .insert(
-                productImages,
-              )
+              .insert(productImages)
               .values({
                 productId,
-                image: imageUrl,
+                image: "",
                 sortOrder,
+                createdAt: now,
+                updatedAt: now,
               })
               .returning({
                 id: productImages.id,
                 productId:
                   productImages.productId,
-                image:
-                  productImages.image,
                 sortOrder:
                   productImages.sortOrder,
-                createdAt:
-                  productImages.createdAt,
               });
 
-          const insertedImage =
-            inserted[0];
+          const inserted =
+            insertedRows[0];
 
-          if (!insertedImage) {
-            return Response.json(
-              {
-                success: false,
-                message:
-                  "تصویر در دیتابیس ثبت نشد.",
-              },
-              {
-                status: 500,
-              },
+          if (!inserted) {
+            throw new Error(
+              "PRODUCT_IMAGE_INSERT_FAILED",
+            );
+          }
+
+          const imageId =
+            Number(
+              inserted.id,
+            );
+
+          if (
+            !Number.isInteger(
+              imageId,
+            ) ||
+            imageId <= 0
+          ) {
+            throw new Error(
+              "INVALID_IMAGE_ID",
             );
           }
 
           /*
-           * =================================================
-           * تصویر اصلی محصول
-           * =================================================
-           *
-           * اگر محصول هنوز تصویر اصلی ندارد،
-           * اولین تصویر را در products.image نیز ذخیره می‌کنیم.
-           *
-           * تصاویر بعدی فقط در product_images ذخیره می‌شوند
-           * و تصویر قبلی دست‌نخورده باقی می‌ماند.
+           * ===================================================
+           * Public Image URL
+           * ===================================================
            */
 
-          let isPrimary =
-            false;
+          const imageUrl =
+            `/api/products/images/${imageId}`;
 
-          if (!product.image) {
+          /*
+           * ===================================================
+           * Update D1 Image URL
+           * ===================================================
+           */
+
+          await db
+            .update(productImages)
+            .set({
+              image: imageUrl,
+              updatedAt: now,
+            })
+            .where(
+              eq(
+                productImages.id,
+                imageId,
+              ),
+            );
+
+          /*
+           * ===================================================
+           * KV Key
+           * ===================================================
+           *
+           * فایل واقعی در KV ذخیره می‌شود.
+           *
+           * از imageId برای route استفاده می‌کنیم
+           * و کلید KV را مستقل نگه می‌داریم.
+           * ===================================================
+           */
+
+          const kvKey =
+            `products/${productId}/${imageId}.webp`;
+
+          const imageBuffer =
+            await file.arrayBuffer();
+
+          /*
+           * ===================================================
+           * Save Image In Workers KV
+           * ===================================================
+           */
+
+          try {
+            await env.PRODUCT_IMAGES.put(
+              kvKey,
+              imageBuffer,
+              {
+                metadata: {
+                  productId,
+                  imageId,
+                  contentType:
+                    "image/webp",
+                },
+              },
+            );
+          } catch (kvError) {
+            console.error(
+              "PRODUCT_IMAGE_KV_UPLOAD_ERROR:",
+              kvError,
+            );
+
+            /*
+             * KV شکست خورد؛ رکورد D1 را هم پاک می‌کنیم
+             * تا رکورد ناقص باقی نماند.
+             */
+
+            await db
+              .delete(
+                productImages,
+              )
+              .where(
+                eq(
+                  productImages.id,
+                  imageId,
+                ),
+              );
+
+            throw new Error(
+              "IMAGE_STORAGE_FAILED",
+            );
+          }
+
+          /*
+           * ===================================================
+           * Store KV Key In D1
+           *
+           * برای اینکه route نمایش تصویر بتواند
+           * مستقیماً KV را پیدا کند.
+           * ===================================================
+           */
+
+          await db
+            .update(productImages)
+            .set({
+              image: imageUrl,
+              updatedAt: now,
+            })
+            .where(
+              eq(
+                productImages.id,
+                imageId,
+              ),
+            );
+
+          /*
+           * ===================================================
+           * First Image = Primary Image
+           * ===================================================
+           */
+
+          if (
+            sortOrder === 0 ||
+            !product.image
+          ) {
             await db
               .update(products)
               .set({
                 image: imageUrl,
-                updatedAt:
-                  new Date().toISOString(),
+                updatedAt: now,
               })
               .where(
                 eq(
@@ -590,57 +557,26 @@ export const Route = createFileRoute(
                   productId,
                 ),
               );
-
-            isPrimary = true;
           }
 
           /*
-           * =================================================
-           * Response
-           * =================================================
+           * ===================================================
+           * Success
+           * ===================================================
            */
 
-          return Response.json(
-            {
-              success: true,
-
-              image: imageUrl,
-
-              fileName,
-
-              originalName:
-                file.name,
-
-              originalType:
-                file.type,
-
-              originalSize:
-                file.size,
-
-              outputType:
-                "image/webp",
-
-              outputSize:
-                outputBuffer.length,
-
-              productId,
-
-              imageId:
-                insertedImage.id,
-
-              sortOrder,
-
-              isPrimary,
-
-              message:
-                isPrimary
-                  ? "تصویر اصلی محصول با موفقیت آپلود شد."
-                  : "تصویر جدید با موفقیت به محصول اضافه شد.",
-            },
-            {
-              status: 201,
-            },
-          );
+          return Response.json({
+            success: true,
+            productId,
+            imageId,
+            image: imageUrl,
+            fileName:
+              `${imageId}.webp`,
+            sortOrder,
+            isPrimary:
+              sortOrder === 0 ||
+              !product.image,
+          });
         } catch (error) {
           console.error(
             "POST /api/admin/uploads/products error:",

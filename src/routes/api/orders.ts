@@ -1,8 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  eq,
-  inArray,
-} from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -193,7 +190,7 @@ async function getCurrentSession(
  * هزینه ارسال
  *
  * normal = رایگان
- * fast = 120,000 تومان
+ * fast = 120,000 ریال
  */
 function getShippingCost(
   shippingMethod: ShippingMethod,
@@ -251,11 +248,11 @@ export const Route =
          *
          * ایجاد سفارش در وضعیت pending_payment
          *
-         * نکته:
+         * مهم:
          * در این مرحله موجودی کم نمی‌شود.
-         * کاهش موجودی بعد از پرداخت موفق انجام می‌شود.
          * ===================================================
          */
+
         POST: async ({
           request,
         }) => {
@@ -266,10 +263,18 @@ export const Route =
              * -----------------------------------------------
              */
 
+            console.log(
+              "[ORDERS] BEFORE SESSION",
+            );
+
             const session =
               await getCurrentSession(
                 request,
               );
+
+            console.log(
+              "[ORDERS] AFTER SESSION",
+            );
 
             if (!session) {
               return Response.json(
@@ -634,361 +639,324 @@ export const Route =
 
             /*
              * =================================================
-             * Transaction
+             * دریافت محصولات واقعی از DB
              *
-             * در این Transaction:
-             *
-             * 1. محصولات واقعی خوانده می‌شوند.
-             * 2. موجودی بررسی می‌شود.
-             * 3. قیمت واقعی از DB خوانده می‌شود.
-             * 4. سفارش pending_payment ساخته می‌شود.
-             * 5. آیتم‌های سفارش ساخته می‌شوند.
-             *
-             * موجودی هنوز کم نمی‌شود.
+             * عمداً خارج از transaction
              * =================================================
              */
 
-            const result =
-              await db.transaction(
-                async (tx) => {
-                  /*
-                   * -----------------------------------------
-                   * دریافت محصولات واقعی
-                   * -----------------------------------------
-                   */
-
-                  const databaseProducts =
-                    await tx
-                      .select({
-                        id:
-                          products.id,
-
-                        name:
-                          products.name,
-
-                        price:
-                          products.price,
-
-                        stock:
-                          products.stock,
-
-                        availability:
-                          products.availability,
-                      })
-                      .from(products)
-                      .where(
-                        inArray(
-                          products.id,
-                          uniqueProductIds,
-                        ),
-                      );
-
-                  /*
-                   * -----------------------------------------
-                   * بررسی وجود همه محصولات
-                   * -----------------------------------------
-                   */
-
-                  if (
-                    databaseProducts.length !==
-                    uniqueProductIds.length
-                  ) {
-                    throw new OrderValidationError(
-                      "یکی از محصولات سفارش پیدا نشد.",
-                      400,
-                    );
-                  }
-
-                  /*
-                   * -----------------------------------------
-                   * Map محصولات
-                   * -----------------------------------------
-                   */
-
-                  const productsById =
-                    new Map(
-                      databaseProducts.map(
-                        (product) => [
-                          product.id,
-                          product,
-                        ],
-                      ),
-                    );
-
-                  /*
-                   * -----------------------------------------
-                   * محاسبه امن سفارش
-                   * -----------------------------------------
-                   */
-
-                  const calculatedItems:
-                    CalculatedOrderItem[] =
-                    [];
-
-                  for (
-                    const item of normalizedItems
-                  ) {
-                    const product =
-                      productsById.get(
-                        item.productId,
-                      );
-
-                    if (!product) {
-                      throw new OrderValidationError(
-                        "یکی از محصولات سفارش پیدا نشد.",
-                        400,
-                      );
-                    }
-
-                    /*
-                     * بررسی موجودی
-                     *
-                     * فقط بررسی می‌کنیم.
-                     * هنوز موجودی را کم نمی‌کنیم.
-                     */
-
-                    if (
-                      product.availability !==
-                        "in-stock" ||
-                      product.stock <= 0
-                    ) {
-                      throw new OrderValidationError(
-                        `محصول «${product.name}» موجود نیست.`,
-                        409,
-                      );
-                    }
-
-                    if (
-                      item.quantity >
-                      product.stock
-                    ) {
-                      throw new OrderValidationError(
-                        `موجودی محصول «${product.name}» کافی نیست.`,
-                        409,
-                      );
-                    }
-
-                    /*
-                     * قیمت واقعی از دیتابیس
-                     */
-
-                    const unitPrice =
-                      Number(
-                        product.price,
-                      );
-
-                    if (
-                      !isValidMoney(
-                        unitPrice,
-                      )
-                    ) {
-                      throw new Error(
-                        "INVALID_PRODUCT_PRICE",
-                      );
-                    }
-
-                    const totalPrice =
-                      unitPrice *
-                      item.quantity;
-
-                    calculatedItems.push({
-                      productId:
-                        product.id,
-
-                      productName:
-                        product.name,
-
-                      unitPrice,
-
-                      quantity:
-                        item.quantity,
-
-                      totalPrice,
-                    });
-                  }
-
-                  /*
-                   * -----------------------------------------
-                   * محاسبه مبلغ
-                   * -----------------------------------------
-                   */
-
-                  const subtotal =
-                    calculatedItems.reduce(
-                      (
-                        sum,
-                        item,
-                      ) =>
-                        sum +
-                        item.totalPrice,
-                      0,
-                    );
-
-                  const total =
-                    subtotal +
-                    shippingCost;
-
-                  /*
-                   * -----------------------------------------
-                   * شماره سفارش
-                   * -----------------------------------------
-                   */
-
-                  const orderNumber =
-                    generateOrderNumber();
-
-                  /*
-                   * -----------------------------------------
-                   * ایجاد سفارش موقت
-                   *
-                   * مهم:
-                   *
-                   * status = pending_payment
-                   * paymentStatus = unpaid
-                   *
-                   * -----------------------------------------
-                   */
-
-                  const insertedOrders =
-                    await tx
-                      .insert(orders)
-                      .values({
-                        orderNumber,
-
-                        accountId,
-
-                        firstName,
-
-                        lastName,
-
-                        customerPhone,
-
-                        customerEmail,
-
-                        province,
-
-                        city,
-
-                        address,
-
-                        postalCode,
-
-                        description,
-
-                        subtotal,
-
-                        shippingCost,
-
-                        total,
-
-                        status:
-                          "pending_payment",
-
-                        paymentStatus:
-                          "unpaid",
-                      })
-                      .returning({
-                        id:
-                          orders.id,
-
-                        orderNumber:
-                          orders.orderNumber,
-
-                        subtotal:
-                          orders.subtotal,
-
-                        shippingCost:
-                          orders.shippingCost,
-
-                        total:
-                          orders.total,
-
-                        status:
-                          orders.status,
-
-                        paymentStatus:
-                          orders.paymentStatus,
-                      });
-
-                  const createdOrder =
-                    insertedOrders[0];
-
-                  if (!createdOrder) {
-                    throw new Error(
-                      "ORDER_INSERT_FAILED",
-                    );
-                  }
-
-                  /*
-                   * -----------------------------------------
-                   * ایجاد آیتم‌های سفارش
-                   * -----------------------------------------
-                   */
-
-                  await tx
-                    .insert(
-                      orderItems,
-                    )
-                    .values(
-                      calculatedItems.map(
-                        (item) => ({
-                          orderId:
-                            createdOrder.id,
-
-                          productId:
-                            item.productId,
-
-                          productName:
-                            item.productName,
-
-                          unitPrice:
-                            item.unitPrice,
-
-                          quantity:
-                            item.quantity,
-
-                          totalPrice:
-                            item.totalPrice,
-                        }),
-                      ),
-                    );
-
-                  /*
-                   * -----------------------------------------
-                   * خروجی Transaction
-                   * -----------------------------------------
-                   */
-
-                  return {
-                    id:
+            console.log(
+              "[ORDERS] BEFORE PRODUCTS QUERY",
+            );
+
+            const databaseProducts =
+              await db
+                .select({
+                  id:
+                    products.id,
+
+                  name:
+                    products.name,
+
+                  price:
+                    products.price,
+
+                  stock:
+                    products.stock,
+
+                  availability:
+                    products.availability,
+                })
+                .from(products)
+                .where(
+                  inArray(
+                    products.id,
+                    uniqueProductIds,
+                  ),
+                );
+
+            console.log(
+              "[ORDERS] AFTER PRODUCTS QUERY",
+            );
+
+            /*
+             * -----------------------------------------------
+             * بررسی وجود همه محصولات
+             * -----------------------------------------------
+             */
+
+            if (
+              databaseProducts.length !==
+              uniqueProductIds.length
+            ) {
+              throw new OrderValidationError(
+                "یکی از محصولات سفارش پیدا نشد.",
+                400,
+              );
+            }
+
+            /*
+             * -----------------------------------------------
+             * Map محصولات
+             * -----------------------------------------------
+             */
+
+            const productsById =
+              new Map(
+                databaseProducts.map(
+                  (product) => [
+                    product.id,
+                    product,
+                  ],
+                ),
+              );
+
+            /*
+             * -----------------------------------------------
+             * محاسبه امن سفارش
+             * -----------------------------------------------
+             */
+
+            const calculatedItems:
+              CalculatedOrderItem[] = [];
+
+            for (
+              const item of normalizedItems
+            ) {
+              const product =
+                productsById.get(
+                  item.productId,
+                );
+
+              if (!product) {
+                throw new OrderValidationError(
+                  "یکی از محصولات سفارش پیدا نشد.",
+                  400,
+                );
+              }
+
+              /*
+               * بررسی موجودی
+               *
+               * فقط بررسی می‌کنیم.
+               * هنوز موجودی را کم نمی‌کنیم.
+               */
+
+              if (
+                product.availability !==
+                  "in-stock" ||
+                product.stock <= 0
+              ) {
+                throw new OrderValidationError(
+                  `محصول «${product.name}» موجود نیست.`,
+                  409,
+                );
+              }
+
+              if (
+                item.quantity >
+                product.stock
+              ) {
+                throw new OrderValidationError(
+                  `موجودی محصول «${product.name}» کافی نیست.`,
+                  409,
+                );
+              }
+
+              /*
+               * قیمت واقعی از دیتابیس
+               */
+
+              const unitPrice =
+                Number(
+                  product.price,
+                );
+
+              if (
+                !isValidMoney(
+                  unitPrice,
+                )
+              ) {
+                throw new Error(
+                  "INVALID_PRODUCT_PRICE",
+                );
+              }
+
+              const totalPrice =
+                unitPrice *
+                item.quantity;
+
+              calculatedItems.push({
+                productId:
+                  product.id,
+
+                productName:
+                  product.name,
+
+                unitPrice,
+
+                quantity:
+                  item.quantity,
+
+                totalPrice,
+              });
+            }
+
+            /*
+             * -----------------------------------------------
+             * محاسبه مبلغ
+             * -----------------------------------------------
+             */
+
+            const subtotal =
+              calculatedItems.reduce(
+                (
+                  sum,
+                  item,
+                ) =>
+                  sum +
+                  item.totalPrice,
+                0,
+              );
+
+            const total =
+              subtotal +
+              shippingCost;
+
+            /*
+             * -----------------------------------------------
+             * شماره سفارش
+             * -----------------------------------------------
+             */
+
+            const orderNumber =
+              generateOrderNumber();
+
+            /*
+             * =================================================
+             * ایجاد سفارش
+             *
+             * بدون transaction
+             * =================================================
+             */
+
+            console.log(
+              "[ORDERS] BEFORE ORDER INSERT",
+            );
+
+            const insertedOrders =
+              await db
+                .insert(orders)
+                .values({
+                  orderNumber,
+
+                  accountId,
+
+                  firstName,
+
+                  lastName,
+
+                  customerPhone,
+
+                  customerEmail,
+
+                  province,
+
+                  city,
+
+                  address,
+
+                  postalCode,
+
+                  description,
+
+                  subtotal,
+
+                  shippingCost,
+
+                  total,
+
+                  status:
+                    "pending_payment",
+
+                  paymentStatus:
+                    "unpaid",
+                })
+                .returning({
+                  id:
+                    orders.id,
+
+                  orderNumber:
+                    orders.orderNumber,
+
+                  subtotal:
+                    orders.subtotal,
+
+                  shippingCost:
+                    orders.shippingCost,
+
+                  total:
+                    orders.total,
+
+                  status:
+                    orders.status,
+
+                  paymentStatus:
+                    orders.paymentStatus,
+                });
+
+            console.log(
+              "[ORDERS] AFTER ORDER INSERT",
+            );
+
+            const createdOrder =
+              insertedOrders[0];
+
+            if (!createdOrder) {
+              throw new Error(
+                "ORDER_INSERT_FAILED",
+              );
+            }
+
+            /*
+             * -----------------------------------------------
+             * ایجاد آیتم‌های سفارش
+             * -----------------------------------------------
+             */
+
+            console.log(
+              "[ORDERS] BEFORE ORDER ITEMS INSERT",
+            );
+
+            await db
+              .insert(orderItems)
+              .values(
+                calculatedItems.map(
+                  (item) => ({
+                    orderId:
                       createdOrder.id,
 
-                    orderNumber:
-                      createdOrder.orderNumber,
+                    productId:
+                      item.productId,
 
-                    subtotal:
-                      Number(
-                        createdOrder.subtotal,
-                      ),
+                    productName:
+                      item.productName,
 
-                    shippingCost:
-                      Number(
-                        createdOrder.shippingCost,
-                      ),
+                    unitPrice:
+                      item.unitPrice,
 
-                    total:
-                      Number(
-                        createdOrder.total,
-                      ),
+                    quantity:
+                      item.quantity,
 
-                    status:
-                      createdOrder.status,
-
-                    paymentStatus:
-                      createdOrder.paymentStatus,
-                  };
-                },
+                    totalPrice:
+                      item.totalPrice,
+                  }),
+                ),
               );
+
+            console.log(
+              "[ORDERS] AFTER ORDER ITEMS INSERT",
+            );
 
             /*
              * -----------------------------------------------
@@ -1002,27 +970,33 @@ export const Route =
 
                 order: {
                   id:
-                    result.id,
+                    createdOrder.id,
 
                   orderNumber:
-                    result.orderNumber,
+                    createdOrder.orderNumber,
 
                   subtotal:
-                    result.subtotal,
+                    Number(
+                      createdOrder.subtotal,
+                    ),
 
                   shippingCost:
-                    result.shippingCost,
+                    Number(
+                      createdOrder.shippingCost,
+                    ),
 
                   shippingMethod,
 
                   total:
-                    result.total,
+                    Number(
+                      createdOrder.total,
+                    ),
 
                   status:
-                    result.status,
+                    createdOrder.status,
 
                   paymentStatus:
-                    result.paymentStatus,
+                    createdOrder.paymentStatus,
                 },
               },
               {
@@ -1230,8 +1204,6 @@ export const Route =
             /*
              * -----------------------------------------------
              * دریافت تمام آیتم‌ها
-             *
-             * جلوگیری از N+1 Query
              * -----------------------------------------------
              */
 
@@ -1389,13 +1361,6 @@ export const Route =
                     updatedAt:
                       order.updatedAt,
 
-                    /*
-                     * shippingMethod فعلاً در Schema
-                     * ذخیره نشده است.
-                     *
-                     * بنابراین برای سازگاری فعلی
-                     * normal برگردانده می‌شود.
-                     */
                     shippingMethod:
                       "normal" as const,
 
@@ -1443,9 +1408,12 @@ export const Route =
 
             return Response.json({
               success: true,
+
               authenticated:
                 true,
+
               orders: result,
+
               count:
                 result.length,
             });
