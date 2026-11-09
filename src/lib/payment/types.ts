@@ -6,11 +6,13 @@ export type PaymentProviderName =
 
 export interface CreatePaymentParams {
   paymentId: number;
-  orderId: number;
+  orderId: number | string;
   orderNumber: string;
   amount: number;
   callbackUrl: string;
   description?: string;
+  mobile?: string;
+  email?: string;
 }
 
 export interface CreatePaymentResult {

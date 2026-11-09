@@ -113,9 +113,11 @@ export const zarinpalPaymentProvider: PaymentProvider = {
         params.description ||
         `پرداخت سفارش ${params.orderNumber}`,
       metadata: {
-        order_id: params.orderId,
-        order_number: params.orderNumber,
-        payment_id: params.paymentId,
+        order_id: String(params.orderId),
+        order_number: String(params.orderNumber),
+        payment_id: String(params.paymentId),
+        ...(params.mobile ? { mobile: String(params.mobile) } : {}),
+        ...(params.email ? { email: String(params.email) } : {}),
       },
     };
 
