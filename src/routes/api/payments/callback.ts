@@ -16,6 +16,11 @@ export const Route = createFileRoute(
     handlers: {
       GET: async ({ request }) => {
         const url = new URL(request.url);
+        const baseUrl = (
+          process.env.APP_URL?.trim() ||
+          process.env.SITE_URL?.trim() ||
+          url.origin
+        ).replace(/\/$/, "");
 
         try {
           const authority =
@@ -46,7 +51,7 @@ export const Route = createFileRoute(
             );
 
             return Response.redirect(
-              `${url.origin}/profile-orders?payment=failed`,
+              `${baseUrl}/profile-orders?payment=failed`,
               302,
             );
           }
@@ -65,7 +70,7 @@ export const Route = createFileRoute(
             );
 
             return Response.redirect(
-              `${url.origin}/profile-orders?payment=cancelled`,
+              `${baseUrl}/profile-orders?payment=cancelled`,
               302,
             );
           }
@@ -108,7 +113,7 @@ export const Route = createFileRoute(
             );
 
             return Response.redirect(
-              `${url.origin}/profile-orders?payment=failed`,
+              `${baseUrl}/profile-orders?payment=failed`,
               302,
             );
           }
@@ -160,10 +165,10 @@ export const Route = createFileRoute(
 
           const successUrl =
             orderId
-              ? `${url.origin}/profile-orders?payment=success&orderId=${encodeURIComponent(
+              ? `${baseUrl}/profile-orders?payment=success&orderId=${encodeURIComponent(
                   String(orderId),
                 )}`
-              : `${url.origin}/profile-orders?payment=success`;
+              : `${baseUrl}/profile-orders?payment=success`;
 
           return Response.redirect(
             successUrl,
@@ -188,7 +193,7 @@ export const Route = createFileRoute(
           );
 
           return Response.redirect(
-            `${url.origin}/profile-orders?payment=failed`,
+            `${baseUrl}/profile-orders?payment=failed`,
             302,
           );
         }

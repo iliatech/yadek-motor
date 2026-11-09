@@ -44,8 +44,37 @@ interface ZarinpalResponse<T> {
   data: T | null;
   errors:
     | Array<{ code: number; message: string }>
+    | { code?: number; message?: string; validations?: unknown[] }
     | Record<string, unknown>
     | null;
+}
+
+function extractZarinpalErrorMessage(
+  json: ZarinpalResponse<unknown> | null,
+  defaultMsg: string,
+): string {
+  if (!json) return defaultMsg;
+  if (
+    json.data &&
+    typeof json.data === "object" &&
+    "message" in json.data &&
+    json.data.message
+  ) {
+    return String(json.data.message);
+  }
+  if (Array.isArray(json.errors) && json.errors[0]?.message) {
+    return String(json.errors[0].message);
+  }
+  if (
+    json.errors &&
+    typeof json.errors === "object" &&
+    !Array.isArray(json.errors) &&
+    "message" in json.errors &&
+    json.errors.message
+  ) {
+    return String(json.errors.message);
+  }
+  return defaultMsg;
 }
 
 interface ZarinpalPaymentRequestData {
@@ -104,13 +133,17 @@ export const zarinpalPaymentProvider: PaymentProvider = {
       .catch(() => null)) as ZarinpalResponse<ZarinpalPaymentRequestData> | null;
 
     if (!json || !json.data || json.data.code !== 100) {
-      let errMsg = "خطا در ارتباط با درگاه پرداخت زرین‌پال.";
+      console.error("[ZARINPAL] Create payment raw response error:", {
+        status: response.status,
+        statusText: response.statusText,
+        payload: { ...payload, merchant_id: "***" },
+        response: json,
+      });
 
-      if (json?.data?.message) {
-        errMsg = json.data.message;
-      } else if (Array.isArray(json?.errors) && json.errors[0]?.message) {
-        errMsg = json.errors[0].message;
-      }
+      const errMsg = extractZarinpalErrorMessage(
+        json,
+        `خطا در ارتباط با درگاه پرداخت زرین‌پال (کد وضعیت: ${response.status}).`,
+      );
 
       throw new Error(errMsg);
     }
@@ -159,11 +192,16 @@ export const zarinpalPaymentProvider: PaymentProvider = {
         .catch(() => null)) as ZarinpalResponse<ZarinpalPaymentVerifyData> | null;
 
       if (!json || !json.data) {
-        let errMsg = "خطا در پاسخ درگاه زرین‌پال.";
+        console.error("[ZARINPAL] Verify payment raw response error:", {
+          status: response.status,
+          statusText: response.statusText,
+          response: json,
+        });
 
-        if (Array.isArray(json?.errors) && json.errors[0]?.message) {
-          errMsg = json.errors[0].message;
-        }
+        const errMsg = extractZarinpalErrorMessage(
+          json,
+          "خطا در پاسخ درگاه زرین‌پال.",
+        );
 
         return {
           success: false,
@@ -184,6 +222,11 @@ export const zarinpalPaymentProvider: PaymentProvider = {
           message: json.data.message || "پرداخت با موفقیت انجام شد.",
         };
       }
+
+      console.error("[ZARINPAL] Payment verification failed:", {
+        code: json.data.code,
+        message: json.data.message,
+      });
 
       return {
         success: false,

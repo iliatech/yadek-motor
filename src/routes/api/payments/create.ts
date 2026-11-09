@@ -346,11 +346,12 @@ export const Route =
                 providerName,
               );
 
-            const callbackUrl =
-              new URL(
-                "/api/payments/callback",
-                request.url,
-              ).toString();
+            const baseUrl =
+              process.env.APP_URL?.trim() ||
+              process.env.SITE_URL?.trim() ||
+              "https://yadakdiamond.ir";
+
+            const callbackUrl = `${baseUrl.replace(/\/$/, "")}/api/payments/callback`;
 
             /*
              * 9. Check existing pending payment
@@ -422,7 +423,7 @@ export const Route =
                   );
               } catch (error) {
                 console.error(
-                  "Payment provider error:",
+                  "Payment provider error (existing pending payment):",
                   error,
                 );
 
@@ -442,8 +443,13 @@ export const Route =
                     ),
                   );
 
+                const errorMessage =
+                  error instanceof Error && error.message
+                    ? error.message
+                    : "ایجاد پرداخت توسط درگاه ناموفق بود.";
+
                 throw new PaymentCreateError(
-                  "ایجاد پرداخت توسط درگاه ناموفق بود.",
+                  errorMessage,
                   502,
                 );
               }
@@ -573,7 +579,7 @@ export const Route =
                 );
             } catch (error) {
               console.error(
-                "Payment provider error:",
+                "Payment provider error (new payment):",
                 error,
               );
 
@@ -598,8 +604,13 @@ export const Route =
                   ),
                 );
 
+              const errorMessage =
+                error instanceof Error && error.message
+                  ? error.message
+                  : "ایجاد پرداخت توسط درگاه ناموفق بود.";
+
               throw new PaymentCreateError(
-                "ایجاد پرداخت توسط درگاه ناموفق بود.",
+                errorMessage,
                 502,
               );
             }
