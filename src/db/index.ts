@@ -1,56 +1,23 @@
-import { drizzle as drizzleD1 } from "drizzle-orm/d1";
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 
-import { drizzle as drizzleLibsql } from "drizzle-orm/libsql";
-
-import { env } from "cloudflare:workers";
-
-/*
- * =========================================================
- * Local SQLite Database
- * =========================================================
- */
-
-const createLocalDb =
-  () =>
-    drizzleLibsql({
-      connection: {
-        url: "file:./data.db",
-      },
-    });
+import * as schema from "./schema";
 
 /*
  * =========================================================
- * Database Type
+ * Local SQLite Database Connection
  * =========================================================
  */
 
-type Database =
-  ReturnType<typeof createLocalDb>;
+const dbPath = process.env.DATABASE_URL
+  ? process.env.DATABASE_URL.replace(/^file:/, "")
+  : "./data.db";
 
-/*
- * =========================================================
- * Database
- * =========================================================
- *
- * D1 is created only when the Cloudflare binding exists.
- * Local SQLite is created only in local development.
- * =========================================================
- */
+const sqlite = new Database(dbPath);
 
-const getDatabase =
-  (): Database => {
-    if (
-      typeof env !==
-        "undefined" &&
-      !!env.diamondmotor_db
-    ) {
-      return drizzleD1(
-        env.diamondmotor_db,
-      ) as unknown as Database;
-    }
+// Enable WAL mode for better concurrency and performance
+sqlite.pragma("journal_mode = WAL");
 
-    return createLocalDb();
-  };
+export const db = drizzle(sqlite, { schema });
 
-export const db =
-  getDatabase();
+export type AppDatabase = typeof db;

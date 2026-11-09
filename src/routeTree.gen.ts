@@ -29,9 +29,7 @@ import { Route as ApiCategoriesRouteImport } from './routes/api/categories'
 import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as ApiOrdersRouteImport } from './routes/api/orders'
 import { Route as ApiProductsRouteImport } from './routes/api.products'
-import { Route as ApiTestNoDbRouteImport } from './routes/api/test-no-db'
 import { Route as ApiUsersRouteImport } from './routes/api/users'
-import { Route as IndexBackupRouteImport } from './routes/index.backup'
 import { Route as ProductRouteImport } from './routes/product.'
 import { Route as ProductProductIdRouteImport } from './routes/product.$productId'
 import { Route as AdminCategoriesCategoryIdRouteImport } from './routes/admin/categories.$categoryId'
@@ -154,19 +152,9 @@ const ApiProductsRoute = ApiProductsRouteImport.update({
   path: '/api/products',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTestNoDbRoute = ApiTestNoDbRouteImport.update({
-  id: '/api/test-no-db',
-  path: '/api/test-no-db',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiUsersRoute = ApiUsersRouteImport.update({
   id: '/api/users',
   path: '/api/users',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexBackupRoute = IndexBackupRouteImport.update({
-  id: '/index/backup',
-  path: '/index/backup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductRoute = ProductRouteImport.update({
@@ -298,9 +286,7 @@ export interface FileRoutesByFullPath {
   '/api/health': typeof ApiHealthRoute
   '/api/orders': typeof ApiOrdersRoute
   '/api/products': typeof ApiProductsRouteWithChildren
-  '/api/test-no-db': typeof ApiTestNoDbRoute
   '/api/users': typeof ApiUsersRoute
-  '/index/backup': typeof IndexBackupRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/categories/$categoryId': typeof AdminCategoriesCategoryIdRoute
@@ -344,9 +330,7 @@ export interface FileRoutesByTo {
   '/api/health': typeof ApiHealthRoute
   '/api/orders': typeof ApiOrdersRoute
   '/api/products': typeof ApiProductsRouteWithChildren
-  '/api/test-no-db': typeof ApiTestNoDbRoute
   '/api/users': typeof ApiUsersRoute
-  '/index/backup': typeof IndexBackupRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/admin': typeof AdminIndexRoute
   '/admin/categories/$categoryId': typeof AdminCategoriesCategoryIdRoute
@@ -391,9 +375,7 @@ export interface FileRoutesById {
   '/api/health': typeof ApiHealthRoute
   '/api/orders': typeof ApiOrdersRoute
   '/api/products': typeof ApiProductsRouteWithChildren
-  '/api/test-no-db': typeof ApiTestNoDbRoute
   '/api/users': typeof ApiUsersRoute
-  '/index/backup': typeof IndexBackupRoute
   '/product/$productId': typeof ProductProductIdRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/categories/$categoryId': typeof AdminCategoriesCategoryIdRoute
@@ -439,9 +421,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/orders'
     | '/api/products'
-    | '/api/test-no-db'
     | '/api/users'
-    | '/index/backup'
     | '/product/$productId'
     | '/admin/'
     | '/admin/categories/$categoryId'
@@ -485,9 +465,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/orders'
     | '/api/products'
-    | '/api/test-no-db'
     | '/api/users'
-    | '/index/backup'
     | '/product/$productId'
     | '/admin'
     | '/admin/categories/$categoryId'
@@ -531,9 +509,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/orders'
     | '/api/products'
-    | '/api/test-no-db'
     | '/api/users'
-    | '/index/backup'
     | '/product/$productId'
     | '/admin/'
     | '/admin/categories/$categoryId'
@@ -578,9 +554,7 @@ export interface RootRouteChildren {
   ApiHealthRoute: typeof ApiHealthRoute
   ApiOrdersRoute: typeof ApiOrdersRoute
   ApiProductsRoute: typeof ApiProductsRouteWithChildren
-  ApiTestNoDbRoute: typeof ApiTestNoDbRoute
   ApiUsersRoute: typeof ApiUsersRoute
-  IndexBackupRoute: typeof IndexBackupRoute
   ProductProductIdRoute: typeof ProductProductIdRoute
   AdminIndexRoute: typeof AdminIndexRoute
   ApiAdminCategoriesRoute: typeof ApiAdminCategoriesRoute
@@ -740,25 +714,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProductsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/test-no-db': {
-      id: '/api/test-no-db'
-      path: '/api/test-no-db'
-      fullPath: '/api/test-no-db'
-      preLoaderRoute: typeof ApiTestNoDbRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/users': {
       id: '/api/users'
       path: '/api/users'
       fullPath: '/api/users'
       preLoaderRoute: typeof ApiUsersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/index/backup': {
-      id: '/index/backup'
-      path: '/index/backup'
-      fullPath: '/index/backup'
-      preLoaderRoute: typeof IndexBackupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/product/': {
@@ -993,9 +953,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthRoute: ApiHealthRoute,
   ApiOrdersRoute: ApiOrdersRoute,
   ApiProductsRoute: ApiProductsRouteWithChildren,
-  ApiTestNoDbRoute: ApiTestNoDbRoute,
   ApiUsersRoute: ApiUsersRoute,
-  IndexBackupRoute: IndexBackupRoute,
   ProductProductIdRoute: ProductProductIdRoute,
   AdminIndexRoute: AdminIndexRoute,
   ApiAdminCategoriesRoute: ApiAdminCategoriesRoute,

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { desc, eq } from "drizzle-orm";
-import { env } from "cloudflare:workers";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { db } from "@/db";
 import {
@@ -432,71 +433,36 @@ export const Route = createFileRoute(
 
           /*
            * ===================================================
-           * Update D1 Image URL
-           * ===================================================
-           */
-
-          await db
-            .update(productImages)
-            .set({
-              image: imageUrl,
-              updatedAt: now,
-            })
-            .where(
-              eq(
-                productImages.id,
-                imageId,
-              ),
-            );
-
-          /*
-           * ===================================================
-           * KV Key
-           * ===================================================
+           * Local Filesystem Storage
            *
-           * فایل واقعی در KV ذخیره می‌شود.
-           *
-           * از imageId برای route استفاده می‌کنیم
-           * و کلید KV را مستقل نگه می‌داریم.
+           * فایل واقعی در دیسک محلی ذخیره می‌شود:
+           * ./uploads/products/${productId}/${imageId}.webp
            * ===================================================
            */
 
-          const kvKey =
-            `products/${productId}/${imageId}.webp`;
+          const uploadDir = join(
+            process.cwd(),
+            "uploads",
+            "products",
+            String(productId),
+          );
 
-          const imageBuffer =
-            await file.arrayBuffer();
+          await mkdir(uploadDir, { recursive: true });
 
-          /*
-           * ===================================================
-           * Save Image In Workers KV
-           * ===================================================
-           */
+          const filePath = join(uploadDir, `${imageId}.webp`);
+          const imageBuffer = Buffer.from(await file.arrayBuffer());
 
           try {
-            await env.PRODUCT_IMAGES.put(
-              kvKey,
-              imageBuffer,
-              {
-                metadata: {
-                  productId,
-                  imageId,
-                  contentType:
-                    "image/webp",
-                },
-              },
-            );
-          } catch (kvError) {
+            await writeFile(filePath, imageBuffer);
+          } catch (fsError) {
             console.error(
-              "PRODUCT_IMAGE_KV_UPLOAD_ERROR:",
-              kvError,
+              "PRODUCT_IMAGE_DISK_UPLOAD_ERROR:",
+              fsError,
             );
 
             /*
-             * KV شکست خورد؛ رکورد D1 را هم پاک می‌کنیم
-             * تا رکورد ناقص باقی نماند.
+             * ذخیره‌سازی ناموفق بود؛ رکورد دیتابیس را پاک می‌کنیم
              */
-
             await db
               .delete(
                 productImages,
@@ -515,10 +481,7 @@ export const Route = createFileRoute(
 
           /*
            * ===================================================
-           * Store KV Key In D1
-           *
-           * برای اینکه route نمایش تصویر بتواند
-           * مستقیماً KV را پیدا کند.
+           * Update Image URL in Database
            * ===================================================
            */
 

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { and, asc, eq } from "drizzle-orm";
-import { env } from "cloudflare:workers";
+import { unlink } from "node:fs/promises";
+import { join } from "node:path";
 
 import { db } from "@/db";
 import { productImages, products } from "@/db/schema";
@@ -30,152 +31,29 @@ class ImageRouteError extends Error {
  */
 
 /**
- * تبدیل اعداد فارسی و عربی به انگلیسی
- */
-function normalizeDigits(value: string): string {
-  return value.replace(/[۰-۹٠-٩]/g, (digit) => {
-    const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
-    const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
-
-    const persianIndex = persianDigits.indexOf(digit);
-
-    if (persianIndex !== -1) {
-      return String(persianIndex);
-    }
-
-    const arabicIndex = arabicDigits.indexOf(digit);
-
-    if (arabicIndex !== -1) {
-      return String(arabicIndex);
-    }
-
-    return digit;
-  });
-}
-
-/**
- * تبدیل مقدار به عدد صحیح مثبت
- */
-function toPositiveInteger(value: unknown): number | null {
-  if (
-    typeof value === "number" &&
-    Number.isInteger(value) &&
-    value > 0
-  ) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const normalized = normalizeDigits(value.trim());
-
-    if (!normalized) {
-      return null;
-    }
-
-    const number = Number(normalized);
-
-    if (Number.isInteger(number) && number > 0) {
-      return number;
-    }
-  }
-
-  return null;
-}
-
-/**
- * دریافت تصاویر یک محصول
- * با ترتیب صحیح
- */
-async function getProductImages(productId: number) {
-  return db
-    .select({
-      id: productImages.id,
-      productId: productImages.productId,
-      image: productImages.image,
-      sortOrder: productImages.sortOrder,
-    })
-    .from(productImages)
-    .where(eq(productImages.productId, productId))
-    .orderBy(
-      asc(productImages.sortOrder),
-      asc(productImages.id),
-    );
-}
-
-/**
- * مرتب‌سازی تصاویر و هماهنگ کردن
- * products.image با اولین تصویر
+ * حذف فایل تصویر از دیسک
  *
- * بدون transaction
+ * ساختار دیسک:
+ * uploads/products/${productId}/${imageId}.webp
  */
-async function normalizeImageOrders(
-  productId: number,
-) {
-  const images = await getProductImages(productId);
-
-  const now = new Date().toISOString();
-
-  for (let index = 0; index < images.length; index += 1) {
-    const image = images[index];
-
-    if (!image) {
-      continue;
-    }
-
-    if (image.sortOrder === index) {
-      continue;
-    }
-
-    await db
-      .update(productImages)
-      .set({
-        sortOrder: index,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(productImages.id, image.id),
-          eq(productImages.productId, productId),
-        ),
-      );
-  }
-
-  const normalizedImages =
-    await getProductImages(productId);
-
-  const firstImage = normalizedImages[0];
-
-  await db
-    .update(products)
-    .set({
-      image: firstImage?.image ?? null,
-      updatedAt: now,
-    })
-    .where(eq(products.id, productId));
-
-  return normalizedImages;
-}
-
-/**
- * حذف فایل تصویر از KV
- *
- * ساختار KV:
- *
- * products/{productId}/{imageId}.webp
- */
-async function deleteImageFromKV(
+async function deleteProductImageFile(
   productId: number,
   imageId: number,
 ): Promise<void> {
-  const kvKey =
-    `products/${productId}/${imageId}.webp`;
+  const filePath = join(
+    process.cwd(),
+    "uploads",
+    "products",
+    String(productId),
+    `${imageId}.webp`,
+  );
 
   try {
-    await env.PRODUCT_IMAGES.delete(kvKey);
+    await unlink(filePath);
   } catch (error) {
     console.warn(
-      "Could not delete product image from KV:",
-      kvKey,
+      "Could not delete product image from disk:",
+      filePath,
       error,
     );
   }
@@ -459,7 +337,7 @@ export const Route = createFileRoute(
            */
 
           if (!usedElsewhere) {
-            await deleteImageFromKV(
+            await deleteProductImageFile(
               productId,
               imageId,
             );
